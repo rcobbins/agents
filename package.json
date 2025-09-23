@@ -15,9 +15,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "validate": "npm run lint && npm run test",
-    "postinstall": "npm run install:server && npm run install:client",
-    "install:server": "cd web-ui/server && npm install",
-    "install:client": "cd web-ui/client && npm install"
+    "install:deps": "npm install && npm run install:server && npm run install:client",
+    "install:server": "test -d web-ui/server && cd web-ui/server && npm install || echo 'Server directory not found'",
+    "install:client": "test -d web-ui/client && cd web-ui/client && npm install || echo 'Client directory not found'"
   },
   "keywords": [
     "agents",
@@ -60,8 +60,8 @@
   },
   "homepage": "https://github.com/your-org/agent-framework#readme",
   "engines": {
-    "node": ">=14.0.0",
-    "npm": ">=6.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   },
   "jest": {
     "testEnvironment": "node",

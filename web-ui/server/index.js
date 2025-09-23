@@ -2,7 +2,6 @@ const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 const compression = require('compression');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -42,8 +41,8 @@ app.use(helmet({
 }));
 app.use(cors());
 app.use(compression());
-app.use(bodyParser.json({ limit: '10mb' }));
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
 // Static files (for production)
