@@ -19,7 +19,6 @@ import {
   PlayArrow as PlayIcon,
   Stop as StopIcon,
   Refresh as RefreshIcon,
-  Terminal as TerminalIcon,
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { socketService } from '../services/socket';

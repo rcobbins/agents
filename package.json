@@ -8,7 +8,7 @@
     "start": "node web-ui/server/index.js",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd web-ui/server && npm run dev",
-    "dev:client": "cd web-ui/client && npm start",
+    "dev:client": "cd web-ui/client && npm run dev",
     "build": "npm run build:client",
     "build:client": "cd web-ui/client && npm run build",
     "test": "jest",
