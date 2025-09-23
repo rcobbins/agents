@@ -1,0 +1,220 @@
+{
+  "version": "1.0.0",
+  "framework": {
+    "name": "Agent Framework",
+    "description": "Multi-agent orchestration framework for automated software development",
+    "author": "Framework Team",
+    "license": "MIT"
+  },
+  "agents": {
+    "types": [
+      "coordinator",
+      "planner",
+      "tester",
+      "coder",
+      "reviewer"
+    ],
+    "defaults": {
+      "timeout": 300,
+      "maxRetries": 3,
+      "logLevel": "info",
+      "messageQueueSize": 100,
+      "healthCheckInterval": 30
+    },
+    "coordinator": {
+      "priority": "high",
+      "maxConcurrentTasks": 10,
+      "taskDistributionStrategy": "round-robin",
+      "goalCheckInterval": 60
+    },
+    "planner": {
+      "priority": "high",
+      "analysisDepth": "deep",
+      "planRevisionThreshold": 0.3,
+      "contextWindowSize": 50
+    },
+    "tester": {
+      "priority": "medium",
+      "testRunnerTimeout": 180,
+      "coverageThreshold": 80,
+      "parallelTests": true
+    },
+    "coder": {
+      "priority": "medium",
+      "maxFileSize": 100000,
+      "syntaxCheckEnabled": true,
+      "autoFormatEnabled": true
+    },
+    "reviewer": {
+      "priority": "low",
+      "reviewDepth": "comprehensive",
+      "securityCheckEnabled": true,
+      "performanceCheckEnabled": true
+    }
+  },
+  "communication": {
+    "messageFormat": "json",
+    "encoding": "utf-8",
+    "compression": false,
+    "encryption": false,
+    "maxMessageSize": 10485760,
+    "messageRetentionDays": 7
+  },
+  "logging": {
+    "enabled": true,
+    "level": "info",
+    "format": "json",
+    "destination": "file",
+    "maxFileSize": "10MB",
+    "maxFiles": 10,
+    "rotation": "daily"
+  },
+  "webUI": {
+    "enabled": true,
+    "port": 3001,
+    "host": "localhost",
+    "cors": {
+      "enabled": true,
+      "origins": ["http://localhost:3000"]
+    },
+    "websocket": {
+      "enabled": true,
+      "pingInterval": 30000,
+      "pingTimeout": 5000,
+      "maxConnections": 100
+    },
+    "api": {
+      "prefix": "/api",
+      "version": "v1",
+      "rateLimit": {
+        "windowMs": 60000,
+        "max": 1000
+      }
+    },
+    "authentication": {
+      "enabled": false,
+      "type": "api-key",
+      "sessionTimeout": 86400
+    }
+  },
+  "storage": {
+    "type": "filesystem",
+    "basePath": ".agents",
+    "structure": {
+      "inbox": "inbox",
+      "outbox": "outbox",
+      "logs": "logs",
+      "state": "state",
+      "cache": "cache"
+    }
+  },
+  "performance": {
+    "maxCPUUsage": 80,
+    "maxMemoryUsage": 2048,
+    "gcInterval": 300,
+    "processMonitoring": true
+  },
+  "initialization": {
+    "templates": {
+      "projectSpec": "PROJECT_SPEC.md",
+      "techStack": "TECH_STACK.md",
+      "goals": "GOALS.json",
+      "testingStrategy": "TESTING_STRATEGY.md",
+      "architecture": "ARCHITECTURE.md",
+      "agentInstructions": "AGENT_INSTRUCTIONS.md"
+    },
+    "validation": {
+      "required": [
+        "PROJECT_SPEC.md",
+        "GOALS.json"
+      ],
+      "optional": [
+        "TECH_STACK.md",
+        "TESTING_STRATEGY.md",
+        "ARCHITECTURE.md"
+      ]
+    },
+    "wizard": {
+      "steps": [
+        "basicInfo",
+        "techStack",
+        "structure",
+        "goals",
+        "testing",
+        "architecture",
+        "review"
+      ],
+      "skipOptional": false
+    }
+  },
+  "monitoring": {
+    "enabled": true,
+    "metrics": [
+      "agentStatus",
+      "messageFlow",
+      "taskProgress",
+      "errorRate",
+      "performance"
+    ],
+    "dashboardRefreshInterval": 5000,
+    "alerting": {
+      "enabled": false,
+      "channels": ["console", "file"],
+      "thresholds": {
+        "errorRate": 0.1,
+        "responseTime": 5000,
+        "queueDepth": 50
+      }
+    }
+  },
+  "development": {
+    "debug": false,
+    "verbose": false,
+    "mockMode": false,
+    "hotReload": true,
+    "sourceMaps": true
+  },
+  "deployment": {
+    "environment": "development",
+    "autoStart": false,
+    "gracefulShutdown": true,
+    "shutdownTimeout": 30
+  },
+  "integrations": {
+    "git": {
+      "enabled": true,
+      "autoCommit": false,
+      "branch": "agent-work"
+    },
+    "ci": {
+      "enabled": false,
+      "provider": null,
+      "webhooks": []
+    },
+    "notifications": {
+      "enabled": false,
+      "channels": []
+    }
+  },
+  "security": {
+    "sanitizeInput": true,
+    "validateMessages": true,
+    "maxRequestSize": "10mb",
+    "trustedHosts": ["localhost", "127.0.0.1"],
+    "allowedFileTypes": [
+      ".js", ".ts", ".jsx", ".tsx",
+      ".py", ".rb", ".go", ".rs",
+      ".java", ".c", ".cpp", ".cs",
+      ".html", ".css", ".scss",
+      ".json", ".xml", ".yaml", ".yml",
+      ".md", ".txt", ".log",
+      ".sh", ".bash", ".zsh"
+    ]
+  },
+  "extensions": {
+    "enabled": false,
+    "directory": "extensions",
+    "autoLoad": false,
+    "whitelist": []
+  }
+}
