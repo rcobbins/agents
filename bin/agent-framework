@@ -7,7 +7,14 @@ set -e
 
 # Script directory and paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FRAMEWORK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Determine framework directory
+# If we're in ~/.local/bin, use the actual framework location
+if [[ "$SCRIPT_DIR" == "$HOME/.local/bin" ]]; then
+    FRAMEWORK_DIR="/home/rob/agent-framework"
+else
+    FRAMEWORK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 
 # Colors
 RED='\033[0;31m'
