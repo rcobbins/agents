@@ -201,8 +201,17 @@ echo -e "${BLUE}─────────────────────�
 
 # Create .agents directory structure
 AGENT_DIR="$PROJECT_DIR/.agents"
-mkdir -p "$AGENT_DIR"/{inbox,outbox,logs,state,config}
+mkdir -p "$AGENT_DIR"/{inbox,outbox,logs,state,config,docs,agents}
 echo -e "${GREEN}  ✓ Agent directories created${NC}"
+
+# Copy documentation to agent docs directory for launcher compatibility
+cp "$PROJECT_DIR/PROJECT_SPEC.md" "$AGENT_DIR/docs/"
+cp "$PROJECT_DIR/GOALS.json" "$AGENT_DIR/docs/"
+cp "$PROJECT_DIR/ARCHITECTURE.md" "$AGENT_DIR/docs/"
+cp "$PROJECT_DIR/TECH_STACK.md" "$AGENT_DIR/docs/"
+cp "$PROJECT_DIR/TESTING_STRATEGY.md" "$AGENT_DIR/docs/"
+cp "$PROJECT_DIR/AGENT_INSTRUCTIONS.md" "$AGENT_DIR/docs/"
+echo -e "${GREEN}  ✓ Documentation copied to agent directory${NC}"
 
 # Create project configuration
 cat > "$AGENT_DIR/config/project.conf" << EOF
@@ -236,6 +245,15 @@ cat > "$AGENT_DIR/state/project.json" << 'EOF'
 }
 EOF
 echo -e "${GREEN}  ✓ Initial agent state${NC}"
+
+# Copy agent templates
+for agent in coordinator planner tester coder reviewer; do
+    if [ -f "$FRAMEWORK_DIR/agents/templates/${agent}.sh" ]; then
+        cp "$FRAMEWORK_DIR/agents/templates/${agent}.sh" "$AGENT_DIR/agents/${agent}.sh"
+        chmod +x "$AGENT_DIR/agents/${agent}.sh"
+    fi
+done
+echo -e "${GREEN}  ✓ Agent scripts copied${NC}"
 
 echo -e "\n${BLUE}${BOLD}Step 5: Creating development files${NC}"
 echo -e "${BLUE}────────────────────────────────────────${NC}"
