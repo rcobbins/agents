@@ -1,0 +1,115 @@
+#!/bin/bash
+
+# Agent Framework CLI
+# Main command-line interface for the Agent Framework
+
+set -e
+
+# Script directory and paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FRAMEWORK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Version
+VERSION="1.0.0"
+
+# Show usage
+show_usage() {
+    echo "Agent Framework v$VERSION"
+    echo ""
+    echo "Usage: agent-framework <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  init <path>        Initialize a new project with the setup wizard"
+    echo "  launch <path>      Launch agents for a project"
+    echo "  validate <path>    Validate project setup"
+    echo "  stop <path>        Stop all agents for a project"
+    echo "  monitor <path>     Monitor running agents"
+    echo "  web                Start the web UI server"
+    echo "  version            Show version information"
+    echo "  help               Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  agent-framework init /path/to/project"
+    echo "  agent-framework launch /path/to/project"
+    echo "  agent-framework web"
+}
+
+# Parse command
+COMMAND="${1:-help}"
+shift || true
+
+case "$COMMAND" in
+    init)
+        # Run initialization wizard
+        PROJECT_PATH="${1:-$(pwd)}"
+        echo -e "${BLUE}Initializing project at: $PROJECT_PATH${NC}"
+        exec "$FRAMEWORK_DIR/init/wizard.sh" "$PROJECT_PATH"
+        ;;
+        
+    launch)
+        # Launch agents
+        PROJECT_PATH="${1:-$(pwd)}"
+        exec "$FRAMEWORK_DIR/launcher/cli/launch.sh" "$PROJECT_PATH"
+        ;;
+        
+    validate)
+        # Validate project
+        PROJECT_PATH="${1:-$(pwd)}"
+        exec "$FRAMEWORK_DIR/init/validators/check-readiness.sh" "$PROJECT_PATH"
+        ;;
+        
+    stop)
+        # Stop agents
+        PROJECT_PATH="${1:-$(pwd)}"
+        echo -e "${YELLOW}Stopping agents for: $PROJECT_PATH${NC}"
+        # Find and kill agent processes
+        pkill -f "agent.*$PROJECT_PATH" || true
+        echo -e "${GREEN}Agents stopped${NC}"
+        ;;
+        
+    monitor)
+        # Monitor agents
+        PROJECT_PATH="${1:-$(pwd)}"
+        echo -e "${BLUE}Monitoring agents for: $PROJECT_PATH${NC}"
+        # Tail agent logs
+        AGENT_DIR="$PROJECT_PATH/.agents"
+        if [ -d "$AGENT_DIR/logs" ]; then
+            tail -f "$AGENT_DIR/logs"/*.log 2>/dev/null
+        else
+            echo -e "${RED}No agent logs found${NC}"
+        fi
+        ;;
+        
+    web)
+        # Start web UI
+        echo -e "${BLUE}Starting Agent Framework Web UI...${NC}"
+        cd "$FRAMEWORK_DIR/web-ui/server"
+        if [ ! -d "node_modules" ]; then
+            echo -e "${YELLOW}Installing dependencies...${NC}"
+            npm install
+        fi
+        npm start
+        ;;
+        
+    version|--version|-v)
+        echo "Agent Framework v$VERSION"
+        ;;
+        
+    help|--help|-h)
+        show_usage
+        ;;
+        
+    *)
+        echo -e "${RED}Unknown command: $COMMAND${NC}"
+        echo ""
+        show_usage
+        exit 1
+        ;;
+esac

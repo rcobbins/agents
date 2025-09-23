@@ -94,16 +94,16 @@ create_directories() {
 install_cli() {
     print_message "$YELLOW" "Installing CLI command..."
     
-    # Create symbolic link to launcher
-    local launcher_path="$FRAMEWORK_DIR/launcher/cli/launch.sh"
+    # Create symbolic link to CLI
+    local cli_path="$FRAMEWORK_DIR/bin/agent-framework"
     local link_path="$BIN_DIR/agent-framework"
     
     if [ -L "$link_path" ]; then
         rm "$link_path"
     fi
     
-    ln -s "$launcher_path" "$link_path"
-    chmod +x "$launcher_path"
+    ln -s "$cli_path" "$link_path"
+    chmod +x "$cli_path"
     
     print_message "$GREEN" "✓ CLI command installed at $link_path"
     
