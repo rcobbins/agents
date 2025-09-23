@@ -152,9 +152,11 @@ run_agent() {
     # Main loop
     while true; do
         # Check for messages
-        for msg in "$INBOX"/*.msg 2>/dev/null; do
+        shopt -s nullglob
+        for msg in "$INBOX"/*.msg; do
             [ -f "$msg" ] && process_message "$msg"
         done
+        shopt -u nullglob
         
         # Check for control signals
         if [ -f "$INBOX/STOP" ]; then
