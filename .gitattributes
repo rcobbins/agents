@@ -1,0 +1,95 @@
+# Git Attributes for Agent Framework
+
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Shell scripts - Always use LF line endings
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Configuration files
+*.conf text eol=lf
+*.json text
+*.md text
+*.txt text
+
+# Documentation
+README.md text
+LICENSE text
+CHANGELOG.md text
+
+# Templates
+*.template text
+*.template.* text
+
+# Source code (various languages the framework might work with)
+*.js text
+*.jsx text
+*.ts text
+*.tsx text
+*.py text
+*.go text
+*.rs text
+*.java text
+*.c text
+*.cpp text
+*.h text
+*.hpp text
+*.rb text
+*.php text
+
+# Web files
+*.html text
+*.css text
+*.scss text
+*.sass text
+*.less text
+*.xml text
+*.svg text
+
+# Config files for various tools
+*.yml text
+*.yaml text
+*.toml text
+*.ini text
+.gitignore text
+.gitattributes text
+.editorconfig text
+Makefile text
+makefile text
+
+# Docker
+Dockerfile text eol=lf
+.dockerignore text
+
+# Documentation images (when added)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+
+# Archives
+*.zip binary
+*.tar.gz binary
+*.tgz binary
+
+# Exclude files from archive exports
+.gitignore export-ignore
+.gitattributes export-ignore
+.github/ export-ignore
+test-projects/ export-ignore
+examples/ export-ignore
+web-ui/client/node_modules/ export-ignore
+web-ui/server/node_modules/ export-ignore
+
+# Language stats (for GitHub)
+# Mark generated or vendor files
+web-ui/client/build/* linguist-generated=true
+web-ui/server/dist/* linguist-generated=true
+docs/* linguist-documentation
+
+# Diff settings
+*.md diff=markdown
+*.json diff=json

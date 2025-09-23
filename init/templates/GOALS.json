@@ -1,0 +1,37 @@
+{
+  "project": "{{PROJECT_NAME}}",
+  "version": "{{PROJECT_VERSION}}",
+  "generated": "{{TIMESTAMP}}",
+  "goals": [
+    {
+      "id": "goal-example",
+      "description": "Example goal - replace with actual project goals",
+      "priority": "high|medium|low",
+      "status": "pending|in_progress|completed|blocked",
+      "created": "{{TIMESTAMP}}",
+      "assigned_to": "coordinator|planner|tester|coder|reviewer",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "Specific measurable criteria for completion"
+      ],
+      "notes": "Additional context or requirements"
+    }
+  ],
+  "metrics": {
+    "test_coverage_target": {{TEST_COVERAGE}},
+    "test_coverage_current": null,
+    "quality_gates": {
+      "tests_must_pass": true,
+      "linting_required": true,
+      "type_checking": false,
+      "security_scan": false,
+      "performance_benchmarks": false
+    }
+  },
+  "progress": {
+    "completed_goals": 0,
+    "total_goals": 0,
+    "last_updated": "{{TIMESTAMP}}",
+    "completion_percentage": 0
+  }
+}

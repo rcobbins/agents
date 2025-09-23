@@ -1,0 +1,157 @@
+# Agent Framework .gitignore
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+*.iml
+
+# Logs and Runtime Files
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# Test Coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Build Outputs
+dist/
+build/
+out/
+
+# Dependency Directories
+node_modules/
+jspm_packages/
+bower_components/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Go
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+
+# Agent Framework Specific
+
+# Project-specific agent configurations (these stay with the project)
+# We don't want to track these in the framework repo
+.agents/
+
+# Local test projects
+test-projects/
+examples/
+
+# Runtime and status files that might be created during development
+*.status
+*.heartbeat
+*.cache
+
+# Message archives from testing
+archive/
+processed_messages/
+
+# Local development configuration overrides
+*.local.conf
+local-config/
+
+# Validation reports from testing
+validation_report_*.txt
+
+# Web UI build files (when implemented)
+web-ui/client/node_modules/
+web-ui/client/build/
+web-ui/client/dist/
+web-ui/server/node_modules/
+web-ui/server/dist/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Package lock files (optional - you might want to keep these)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Backup files
+*.backup
+*.bak
+backup/
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# Windows
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
