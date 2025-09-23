@@ -121,10 +121,14 @@ web-ui/server/dist/
 .env.local
 .env.*.local
 
-# Package lock files (optional - you might want to keep these)
-# package-lock.json
-# yarn.lock
-# pnpm-lock.yaml
+# Package lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Non-project files that might be created during setup
+ORIGINAL_PLAN.md
+test-dependencies.sh
 
 # Backup files
 *.backup
