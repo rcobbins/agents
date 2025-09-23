@@ -27,6 +27,7 @@ show_usage() {
     echo ""
     echo "Commands:"
     echo "  init <path>        Initialize a new project with the setup wizard"
+    echo "  init-demo <path>   Initialize a demo project with TaskFlow app"
     echo "  launch <path>      Launch agents for a project"
     echo "  validate <path>    Validate project setup"
     echo "  stop <path>        Stop all agents for a project"
@@ -51,6 +52,13 @@ case "$COMMAND" in
         PROJECT_PATH="${1:-$(pwd)}"
         echo -e "${BLUE}Initializing project at: $PROJECT_PATH${NC}"
         exec "$FRAMEWORK_DIR/init/wizard.sh" "$PROJECT_PATH"
+        ;;
+        
+    init-demo)
+        # Initialize demo project with pre-populated templates
+        PROJECT_PATH="${1:-$(pwd)}"
+        echo -e "${BLUE}Initializing demo project at: $PROJECT_PATH${NC}"
+        exec "$FRAMEWORK_DIR/demo/init-demo.sh" "$PROJECT_PATH"
         ;;
         
     launch)
