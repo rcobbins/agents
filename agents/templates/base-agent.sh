@@ -83,7 +83,7 @@ process_message() {
     if [ ! -f "$msg_file" ]; then
         log_error "Message file not found: $msg_file"
         return 1
-    }
+    fi
     
     # Extract message content (basic parsing for now)
     local content=$(cat "$msg_file")
@@ -196,4 +196,4 @@ ask_claude() {
 
 # Export functions for child scripts
 export -f log log_error log_success update_status send_message process_message
-export -f health_check shutdown cleanup load_project_docs ask_claude
+export -f health_check shutdown cleanup load_project_docs ask_claude run_agent handle_task
