@@ -63,6 +63,24 @@ app.locals.agentManager = agentManager;
 app.locals.messageBroker = messageBroker;
 app.locals.io = io;
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Agent Framework Server',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/api/health',
+      projects: '/api/projects',
+      agents: '/api/agents',
+      messages: '/api/messages',
+      status: '/api/status'
+    },
+    websocket: 'Connect via Socket.IO for real-time updates',
+    documentation: 'https://github.com/rcobbins/agents'
+  });
+});
+
 // API Routes
 app.use('/api/projects', projectRoutes);
 app.use('/api/agents', agentRoutes);
