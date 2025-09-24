@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001';
+// Vite uses import.meta.env instead of process.env
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
 class SocketService {
   private socket: Socket | null = null;
