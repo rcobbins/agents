@@ -103,14 +103,51 @@ case "$COMMAND" in
         ;;
         
     web)
-        # Start web UI
+        # Start web UI (both frontend and backend)
         echo -e "${BLUE}Starting Agent Framework Web UI...${NC}"
-        cd "$FRAMEWORK_DIR/web-ui/server"
-        if [ ! -d "node_modules" ]; then
-            echo -e "${YELLOW}Installing dependencies...${NC}"
+        echo -e "${CYAN}Frontend: http://localhost:3000${NC}"
+        echo -e "${CYAN}Backend API: http://localhost:3001${NC}"
+        echo ""
+        
+        # Check and install server dependencies
+        if [ ! -d "$FRAMEWORK_DIR/web-ui/server/node_modules" ]; then
+            echo -e "${YELLOW}Installing server dependencies...${NC}"
+            cd "$FRAMEWORK_DIR/web-ui/server"
             npm install
         fi
-        npm start
+        
+        # Check and install client dependencies
+        if [ ! -d "$FRAMEWORK_DIR/web-ui/client/node_modules" ]; then
+            echo -e "${YELLOW}Installing client dependencies...${NC}"
+            cd "$FRAMEWORK_DIR/web-ui/client"
+            npm install
+        fi
+        
+        # Check and install main dependencies (for concurrently)
+        cd "$FRAMEWORK_DIR"
+        if [ ! -d "node_modules" ]; then
+            echo -e "${YELLOW}Installing main dependencies...${NC}"
+            npm install
+        fi
+        
+        # Check if concurrently is available
+        if npm list concurrently >/dev/null 2>&1; then
+            echo -e "${GREEN}Starting both services with concurrently...${NC}"
+            npm run dev
+        else
+            echo -e "${YELLOW}Starting services separately (concurrently not found)...${NC}"
+            echo -e "${CYAN}Starting backend server on port 3001...${NC}"
+            cd "$FRAMEWORK_DIR/web-ui/server"
+            npm start &
+            SERVER_PID=$!
+            
+            echo -e "${CYAN}Starting frontend on port 3000...${NC}"
+            cd "$FRAMEWORK_DIR/web-ui/client"
+            npm run dev
+            
+            # When frontend is stopped, also stop backend
+            kill $SERVER_PID 2>/dev/null
+        fi
         ;;
         
     version|--version|-v)
