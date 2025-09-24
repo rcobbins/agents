@@ -9,7 +9,7 @@ This guide walks you through initializing a new project with the Agent Framework
 - **Bash** 4.0 or higher
 - **jq** for JSON processing
 - **Git** for version control (recommended)
-- **Node.js** 14+ (for web UI, optional)
+- **Node.js** 14+ and npm (for web UI, recommended)
 
 ### Optional Software
 - **Claude CLI** for enhanced AI capabilities
@@ -22,23 +22,55 @@ This guide walks you through initializing a new project with the Agent Framework
 cd /path/to/your/project
 
 # Run the initialization wizard
-/home/rob/agent-framework/init/wizard.sh
+agent-framework init .
 
 # Validate setup
-/home/rob/agent-framework/init/validators/check-readiness.sh
+agent-framework validate .
+
+# Start the Web UI (recommended)
+agent-framework web start
+# Access at http://localhost:3000
 
 # Launch agents
-/home/rob/agent-framework/launcher/cli/launch.sh
+agent-framework launch .
+```
+
+### Web UI Initialization (Alternative)
+
+```bash
+# Start the web interface
+agent-framework web start
+
+# Navigate to http://localhost:3000
+# Use the Project Initialization Wizard for guided setup
+# The web UI provides:
+# - Interactive project configuration
+# - AI-assisted setup suggestions
+# - Template selection
+# - Real-time validation
 ```
 
 ## Detailed Initialization Process
 
 ### Step 1: Running the Wizard
 
-The initialization wizard will guide you through configuring your project:
-
+#### Option A: CLI Wizard
 ```bash
-/home/rob/agent-framework/init/wizard.sh [project-directory]
+agent-framework init [project-directory]
+```
+
+#### Option B: Web UI Wizard (Recommended)
+```bash
+# Start the web UI
+agent-framework web start
+
+# Navigate to http://localhost:3000/init
+# The web wizard provides:
+# - Visual step-by-step guidance
+# - Template library
+# - AI-powered suggestions
+# - Real-time validation
+# - Preview of generated configuration
 ```
 
 You'll be prompted for:
@@ -146,10 +178,16 @@ Customize for your project:
 
 ### Step 4: Validation
 
-Run the validation script to ensure everything is configured correctly:
-
+#### CLI Validation
 ```bash
-/home/rob/agent-framework/init/validators/check-readiness.sh
+agent-framework validate .
+```
+
+#### Web UI Validation
+```bash
+# If web UI is running, visit:
+# http://localhost:3000/projects
+# Click on your project → Validate button
 ```
 
 The validator checks:
@@ -158,12 +196,32 @@ The validator checks:
 - ✅ Project structure is valid
 - ✅ Test command is configured
 - ✅ Agent scripts are present
+- ✅ Dependencies installed
+- ✅ Permissions correct
 
 ### Step 5: Launching Agents
 
-#### Using the CLI Launcher
+#### Using Web UI (Recommended)
 
 ```bash
+# Start the web UI if not already running
+agent-framework web start
+
+# Navigate to http://localhost:3000
+# From the Dashboard:
+# - Click "Start All Agents" to launch all at once
+# - Or start individual agents from the Agents panel
+# - Monitor real-time status and logs
+# - View task progress visually
+```
+
+#### Using the CLI
+
+```bash
+# Launch all agents
+agent-framework launch /path/to/project
+
+# Using the menu-based launcher
 /home/rob/agent-framework/launcher/cli/launch.sh /path/to/project
 ```
 
@@ -188,7 +246,7 @@ cd /path/to/project
 #### Auto-start Mode
 
 ```bash
-/home/rob/agent-framework/launcher/cli/launch.sh /path/to/project --auto-start
+agent-framework launch /path/to/project --auto-start
 ```
 
 ## Configuration Options
@@ -248,14 +306,56 @@ cp -r .agents/docs /home/rob/my-templates/nodejs-api/
 cp -r /home/rob/my-templates/nodejs-api/* new-project/.agents/docs/
 ```
 
+## Monitoring Your Initialized Project
+
+### Web UI Monitoring
+
+```bash
+# Ensure web UI is running
+agent-framework web status
+
+# If not running, start it
+agent-framework web start
+
+# Access monitoring at http://localhost:3000
+```
+
+The web UI provides:
+- **Real-time agent status**: See what each agent is doing
+- **Task queue visualization**: Track pending and active tasks
+- **Goal progress**: Visual burndown charts
+- **Performance metrics**: CPU, memory, execution times
+- **Live logs**: Stream agent outputs
+
+### CLI Monitoring
+
+```bash
+# Check agent status
+agent-framework status .
+
+# View logs
+tail -f .agents/logs/*.log
+
+# Monitor specific agent
+agent-framework monitor . --agent coordinator
+```
+
 ## Troubleshooting
+
+### Web UI Issues
+
+1. Check if running: `agent-framework web status`
+2. Verify ports available: `lsof -i :3000 -i :3001`
+3. Check logs: `agent-framework web logs`
+4. Restart if needed: `agent-framework web restart`
 
 ### Agents Not Starting
 
 1. Check logs: `tail -f .agents/logs/*.log`
 2. Verify scripts are executable: `chmod +x .agents/agents/*.sh`
-3. Ensure dependencies installed: `jq --version`
-4. Run validation: `check-readiness.sh`
+3. Ensure dependencies installed: `jq --version && node --version`
+4. Run validation: `agent-framework validate .`
+5. Use web UI diagnostics: http://localhost:3000/diagnostics
 
 ### No Progress on Goals
 
@@ -335,13 +435,34 @@ jobs:
 
 ### Remote Monitoring
 
-Use the web UI (when available) or SSH forwarding:
+The web UI enables remote monitoring:
 
 ```bash
-# SSH with port forwarding
-ssh -L 3000:localhost:3000 user@server
+# On the server, start web UI
+agent-framework web start
+
+# From your local machine, SSH with port forwarding
+ssh -L 3000:localhost:3000 -L 3001:localhost:3001 user@server
 
 # Access web UI at http://localhost:3000
+# Full functionality including:
+# - Real-time updates via WebSocket
+# - Agent control
+# - Log streaming
+# - Task management
+```
+
+### Headless Server Setup
+
+```bash
+# Start web UI on server (persists after logout)
+nohup agent-framework web start &
+
+# Check status
+agent-framework web status
+
+# Stop when needed
+agent-framework web stop
 ```
 
 ## Next Steps
@@ -352,5 +473,27 @@ ssh -L 3000:localhost:3000 user@server
 4. **Iterate**: Improve based on agent performance
 5. **Scale**: Add more sophisticated goals as agents prove capability
 
+## Demo Project
+
+Try the demo project to see everything in action:
+
+```bash
+# Initialize demo project
+agent-framework init-demo /path/to/demo
+
+# Start web UI
+agent-framework web start
+
+# Navigate to http://localhost:3000
+# The demo includes:
+# - Pre-configured agents
+# - Sample goals
+# - Example project structure
+# - TaskFlow Pro application
+```
+
 ---
-*For more information, see the [Agent Guide](AGENT_GUIDE.md) and [API Documentation](API.md)*
+*For more information, see:*
+- *[Agent Guide](AGENT_GUIDE.md) - Detailed agent information*
+- *[API Documentation](API.md) - Complete API reference*
+- *[Web UI Guide](WEB_UI_GUIDE.md) - Web interface documentation*

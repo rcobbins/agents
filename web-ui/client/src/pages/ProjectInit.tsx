@@ -1,406 +1,621 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Box,
+  Typography,
   Stepper,
   Step,
   StepLabel,
-  StepContent,
   Button,
   Paper,
-  Box,
-  Typography,
-  TextField,
-  Chip,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Grid,
-  Card,
-  CardContent,
+  Alert,
+  Collapse,
+  LinearProgress,
+  Stack,
+  Fade,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
+import {
+  NavigateBefore,
+  NavigateNext,
+  Save,
+  HelpOutline,
+  AutoAwesome,
+  Engineering,
+  CheckCircle,
+} from '@mui/icons-material';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
 
-const steps = [
-  'Basic Information',
-  'Technology Stack',
-  'Project Structure',
-  'Goals & Objectives',
-  'Testing Strategy',
-  'Architecture',
-  'Review & Create',
+// Import all the new components
+import ModeSelector from '../components/project-init/ModeSelector';
+import ProjectBasicInfo from '../components/project-init/ProjectBasicInfo';
+import ProjectTypeSelector from '../components/project-init/ProjectTypeSelector';
+import TemplateChooser from '../components/project-init/TemplateChooser';
+import SmartTechStackBuilder from '../components/project-init/SmartTechStackBuilder';
+import GoalsWizard from '../components/project-init/GoalsWizard';
+import TestingStrategyGuide from '../components/project-init/TestingStrategyGuide';
+import ArchitectureHelper from '../components/project-init/ArchitectureHelper';
+import ComplexityEstimator from '../components/project-init/ComplexityEstimator';
+import ReviewWithValidation from '../components/project-init/ReviewWithValidation';
+import ProjectAssistantPanel from '../components/project-init/ProjectAssistantPanel';
+
+// Import types
+import { ProjectConfig } from '../types/project';
+import { PROJECT_TEMPLATES, ProjectTemplate } from '../data/projectTemplates';
+
+const STEPS_GUIDED = [
+  { label: 'Setup Mode', id: 'mode' },
+  { label: 'Basic Info', id: 'info' },
+  { label: 'Project Type', id: 'type' },
+  { label: 'Choose Template', id: 'template' },
+  { label: 'Technology Stack', id: 'techstack' },
+  { label: 'Project Goals', id: 'goals' },
+  { label: 'Testing Strategy', id: 'testing' },
+  { label: 'Architecture', id: 'architecture' },
+  { label: 'Complexity Analysis', id: 'complexity' },
+  { label: 'Review & Generate', id: 'review' },
+];
+
+const STEPS_EXPERT = [
+  { label: 'Configuration', id: 'config' },
+  { label: 'Review & Generate', id: 'review' },
 ];
 
 function ProjectInit() {
   const navigate = useNavigate();
+  const [mode, setMode] = useState<'guided' | 'expert'>('guided');
   const [activeStep, setActiveStep] = useState(0);
-  const [projectData, setProjectData] = useState<any>({
+  const [showAssistant, setShowAssistant] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [experience, setExperience] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
+  
+  // Project configuration state
+  const [projectConfig, setProjectConfig] = useState<ProjectConfig>({
     name: '',
+    type: '',
     description: '',
     path: '',
     techStack: [],
-    structure: {
-      directories: [],
-      entryPoint: '',
-    },
     goals: [],
-    testing: {
-      framework: '',
-      coverage: 80,
+    testingStrategy: {
+      unitTestCoverage: 70,
+      integrationTesting: false,
+      e2eTesting: false,
+      performanceTesting: false,
+      securityTesting: false,
+      accessibilityTesting: false,
+      cicd: false,
+      frameworks: [],
+      automationLevel: 'semi-auto',
     },
     architecture: {
-      type: 'monolithic',
-      components: [],
+      pattern: 'monolithic',
+      database: 'sql',
+      deployment: 'cloud',
+      scaling: 'vertical',
+      apiStyle: 'rest',
+      features: [],
     },
+    teamSize: 1,
+    timeframe: '3 months',
   });
 
-  const handleNext = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep + 1);
-  };
+  const steps = mode === 'guided' ? STEPS_GUIDED : STEPS_EXPERT;
 
-  const handleBack = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
-  };
+  const handleNext = useCallback(() => {
+    if (activeStep < steps.length - 1) {
+      setActiveStep(prev => prev + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [activeStep, steps.length]);
 
-  const handleReset = () => {
-    setActiveStep(0);
-  };
+  const handleBack = useCallback(() => {
+    if (activeStep > 0) {
+      setActiveStep(prev => prev - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [activeStep]);
 
-  const handleCreateProject = async () => {
+  const handleStepClick = useCallback((stepIndex: number) => {
+    setActiveStep(stepIndex);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleProjectTypeSelect = useCallback((type: string) => {
+    setProjectConfig(prev => ({ ...prev, type }));
+    
+    // Auto-advance in guided mode
+    if (mode === 'guided') {
+      setTimeout(handleNext, 500);
+    }
+  }, [mode, handleNext]);
+
+  const handleTemplateSelect = useCallback((template: ProjectTemplate) => {
+    setProjectConfig(prev => ({
+      ...prev,
+      name: template.name,
+      description: template.description,
+      techStack: template.techStack,
+      goals: template.goals.map((goal, index) => ({
+        id: `goal-${index}`,
+        text: goal.description,
+        priority: goal.priority,
+        category: 'custom' as const,
+      })),
+      architecture: {
+        ...prev.architecture,
+        pattern: (template.architecture as any).type || (template.architecture as any).pattern || 'monolithic',
+      },
+      testingStrategy: {
+        ...prev.testingStrategy,
+        ...template.testing,
+      },
+    }));
+    
+    // Auto-advance
+    setTimeout(handleNext, 500);
+  }, [handleNext]);
+
+  const handleSkipTemplate = useCallback(() => {
+    handleNext();
+  }, [handleNext]);
+
+  const handleEditSection = useCallback((section: string) => {
+    const stepIndex = steps.findIndex(s => s.id === section);
+    if (stepIndex >= 0) {
+      setActiveStep(stepIndex);
+    }
+  }, [steps]);
+
+  const handleGenerateProject = async () => {
+    setIsGenerating(true);
     try {
+      // Prepare the project data
+      const projectData = {
+        ...projectConfig,
+        mode,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Call the API to create the project
       const response = await api.post('/projects', projectData);
-      toast.success('Project created successfully!');
-      navigate(`/project/${response.data.id}`);
+      
+      toast.success('Project created successfully! 🎉');
+      
+      // Navigate to the project page
+      setTimeout(() => {
+        navigate(`/project/${response.data.id}`);
+      }, 1000);
     } catch (error: any) {
+      console.error('Failed to create project:', error);
       toast.error(error.response?.data?.error || 'Failed to create project');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
-  const updateProjectData = (field: string, value: any) => {
-    setProjectData((prev: any) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
+  const handleSaveAsTemplate = useCallback(() => {
+    try {
+      const templateData = {
+        ...projectConfig,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(`project-template-${Date.now()}`, JSON.stringify(templateData));
+      toast.success('Template saved successfully!');
+    } catch (error) {
+      toast.error('Failed to save template');
+    }
+  }, [projectConfig]);
 
-  const renderStepContent = (step: number) => {
-    switch (step) {
-      case 0: // Basic Information
+  const getStepContent = useCallback((step: number) => {
+    const stepId = steps[step].id;
+
+    switch (stepId) {
+      case 'mode':
         return (
-          <Box>
-            <TextField
-              fullWidth
-              label="Project Name"
-              value={projectData.name}
-              onChange={(e) => updateProjectData('name', e.target.value)}
-              margin="normal"
-              required
-            />
-            <TextField
-              fullWidth
-              label="Description"
-              value={projectData.description}
-              onChange={(e) => updateProjectData('description', e.target.value)}
-              margin="normal"
-              multiline
-              rows={3}
-            />
-            <TextField
-              fullWidth
-              label="Project Path"
-              value={projectData.path}
-              onChange={(e) => updateProjectData('path', e.target.value)}
-              margin="normal"
-              required
-              helperText="Absolute path to your project directory"
-            />
-          </Box>
+          <ModeSelector
+            mode={mode}
+            onChange={setMode}
+            experience={experience}
+          />
         );
 
-      case 1: // Technology Stack
+      case 'info':
         return (
-          <Box>
-            <Typography variant="body2" gutterBottom>
-              Add technologies used in your project
-            </Typography>
-            <TextField
-              fullWidth
-              label="Add Technology"
-              margin="normal"
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  const value = (e.target as HTMLInputElement).value;
-                  if (value) {
-                    updateProjectData('techStack', [...projectData.techStack, value]);
-                    (e.target as HTMLInputElement).value = '';
-                  }
-                }
-              }}
-              helperText="Press Enter to add"
-            />
-            <Box mt={2}>
-              {projectData.techStack.map((tech: string, index: number) => (
-                <Chip
-                  key={index}
-                  label={tech}
-                  onDelete={() => {
-                    const newStack = projectData.techStack.filter((_: any, i: number) => i !== index);
-                    updateProjectData('techStack', newStack);
-                  }}
-                  style={{ margin: 4 }}
-                />
-              ))}
-            </Box>
-          </Box>
+          <ProjectBasicInfo
+            name={projectConfig.name}
+            path={projectConfig.path}
+            description={projectConfig.description}
+            onChange={(field, value) => 
+              setProjectConfig(prev => ({ ...prev, [field]: value }))
+            }
+          />
         );
 
-      case 2: // Project Structure
+      case 'type':
         return (
-          <Box>
-            <TextField
-              fullWidth
-              label="Entry Point"
-              value={projectData.structure.entryPoint}
-              onChange={(e) =>
-                updateProjectData('structure', {
-                  ...projectData.structure,
-                  entryPoint: e.target.value,
-                })
+          <ProjectTypeSelector
+            selected={projectConfig.type}
+            onSelect={handleProjectTypeSelect}
+            showHelper={mode === 'guided'}
+          />
+        );
+
+      case 'template':
+        return (
+          <TemplateChooser
+            projectType={projectConfig.type}
+            onSelect={handleTemplateSelect}
+            onSkip={handleSkipTemplate}
+          />
+        );
+
+      case 'techstack':
+        return (
+          <SmartTechStackBuilder
+            selectedStack={projectConfig.techStack}
+            onStackChange={(stack) => setProjectConfig(prev => ({ ...prev, techStack: stack }))}
+            projectType={projectConfig.type}
+            showSuggestions={mode === 'guided'}
+          />
+        );
+
+      case 'goals':
+        return (
+          <GoalsWizard
+            goals={projectConfig.goals || []}
+            onChange={(goals) => setProjectConfig(prev => ({ ...prev, goals }))}
+            projectType={projectConfig.type}
+            showSuggestions={mode === 'guided'}
+          />
+        );
+
+      case 'testing':
+        return (
+          <TestingStrategyGuide
+            config={projectConfig.testingStrategy}
+            onChange={(testingStrategy) => setProjectConfig(prev => ({ ...prev, testingStrategy }))}
+            projectType={projectConfig.type}
+            techStack={projectConfig.techStack}
+          />
+        );
+
+      case 'architecture':
+        return (
+          <ArchitectureHelper
+            config={projectConfig.architecture}
+            onChange={(architecture) => setProjectConfig(prev => ({ ...prev, architecture }))}
+            projectType={projectConfig.type}
+            techStack={projectConfig.techStack}
+          />
+        );
+
+      case 'complexity':
+        return (
+          <ComplexityEstimator
+            config={{
+              projectType: projectConfig.type,
+              techStack: projectConfig.techStack,
+              features: projectConfig.architecture.features,
+              teamSize: projectConfig.teamSize,
+              experience,
+              architecture: projectConfig.architecture.pattern,
+              testing: {
+                unitTestCoverage: projectConfig.testingStrategy.unitTestCoverage,
+                e2eTesting: projectConfig.testingStrategy.e2eTesting,
+                integrationTesting: projectConfig.testingStrategy.integrationTesting,
+              },
+              goals: projectConfig.goals,
+            }}
+          />
+        );
+
+      case 'config':
+        // Expert mode: show all configurations in one page
+        return (
+          <Stack spacing={4}>
+            <ProjectBasicInfo
+              name={projectConfig.name}
+              path={projectConfig.path}
+              description={projectConfig.description}
+              onChange={(field, value) => 
+                setProjectConfig(prev => ({ ...prev, [field]: value }))
               }
-              margin="normal"
-              helperText="e.g., src/index.js, main.py"
             />
-            <TextField
-              fullWidth
-              label="Add Directory"
-              margin="normal"
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  const value = (e.target as HTMLInputElement).value;
-                  if (value) {
-                    updateProjectData('structure', {
-                      ...projectData.structure,
-                      directories: [...projectData.structure.directories, value],
-                    });
-                    (e.target as HTMLInputElement).value = '';
-                  }
-                }
-              }}
-              helperText="Press Enter to add important directories"
+            <ProjectTypeSelector
+              selected={projectConfig.type}
+              onSelect={(type) => setProjectConfig(prev => ({ ...prev, type }))}
+              showHelper={false}
             />
-            <Box mt={2}>
-              {projectData.structure.directories.map((dir: string, index: number) => (
-                <Chip
-                  key={index}
-                  label={dir}
-                  onDelete={() => {
-                    const newDirs = projectData.structure.directories.filter(
-                      (_: any, i: number) => i !== index
-                    );
-                    updateProjectData('structure', {
-                      ...projectData.structure,
-                      directories: newDirs,
-                    });
-                  }}
-                  style={{ margin: 4 }}
-                />
-              ))}
-            </Box>
-          </Box>
+            <SmartTechStackBuilder
+              selectedStack={projectConfig.techStack}
+              onStackChange={(stack) => setProjectConfig(prev => ({ ...prev, techStack: stack }))}
+              projectType={projectConfig.type}
+              showSuggestions={false}
+            />
+            <GoalsWizard
+              goals={projectConfig.goals || []}
+              onChange={(goals) => setProjectConfig(prev => ({ ...prev, goals }))}
+              projectType={projectConfig.type}
+              showSuggestions={false}
+            />
+            <TestingStrategyGuide
+              config={projectConfig.testingStrategy}
+              onChange={(testingStrategy) => setProjectConfig(prev => ({ ...prev, testingStrategy }))}
+              projectType={projectConfig.type}
+              techStack={projectConfig.techStack}
+            />
+            <ArchitectureHelper
+              config={projectConfig.architecture}
+              onChange={(architecture) => setProjectConfig(prev => ({ ...prev, architecture }))}
+              projectType={projectConfig.type}
+              techStack={projectConfig.techStack}
+            />
+          </Stack>
         );
 
-      case 3: // Goals & Objectives
+      case 'review':
         return (
-          <Box>
-            <Typography variant="body2" gutterBottom>
-              Define project goals for agents to work towards
-            </Typography>
-            <TextField
-              fullWidth
-              label="Add Goal"
-              margin="normal"
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  const value = (e.target as HTMLInputElement).value;
-                  if (value) {
-                    const newGoal = {
-                      id: `goal-${Date.now()}`,
-                      description: value,
-                      status: 'pending',
-                      priority: 'medium',
-                    };
-                    updateProjectData('goals', [...projectData.goals, newGoal]);
-                    (e.target as HTMLInputElement).value = '';
-                  }
-                }
-              }}
-              helperText="Press Enter to add a goal"
-            />
-            <Box mt={2}>
-              {projectData.goals.map((goal: any) => (
-                <Card key={goal.id} style={{ marginBottom: 8 }}>
-                  <CardContent>
-                    <Typography variant="body1">{goal.description}</Typography>
-                    <Chip
-                      label={goal.priority}
-                      size="small"
-                      color="primary"
-                      style={{ marginTop: 8 }}
-                    />
-                  </CardContent>
-                </Card>
-              ))}
-            </Box>
-          </Box>
-        );
-
-      case 4: // Testing Strategy
-        return (
-          <Box>
-            <TextField
-              fullWidth
-              label="Testing Framework"
-              value={projectData.testing.framework}
-              onChange={(e) =>
-                updateProjectData('testing', {
-                  ...projectData.testing,
-                  framework: e.target.value,
-                })
-              }
-              margin="normal"
-              helperText="e.g., Jest, Pytest, Mocha"
-            />
-            <TextField
-              fullWidth
-              label="Coverage Target (%)"
-              type="number"
-              value={projectData.testing.coverage}
-              onChange={(e) =>
-                updateProjectData('testing', {
-                  ...projectData.testing,
-                  coverage: parseInt(e.target.value),
-                })
-              }
-              margin="normal"
-              inputProps={{ min: 0, max: 100 }}
-            />
-          </Box>
-        );
-
-      case 5: // Architecture
-        return (
-          <Box>
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Architecture Type</InputLabel>
-              <Select
-                value={projectData.architecture.type}
-                onChange={(e) =>
-                  updateProjectData('architecture', {
-                    ...projectData.architecture,
-                    type: e.target.value,
-                  })
-                }
-              >
-                <MenuItem value="monolithic">Monolithic</MenuItem>
-                <MenuItem value="microservices">Microservices</MenuItem>
-                <MenuItem value="serverless">Serverless</MenuItem>
-                <MenuItem value="modular">Modular</MenuItem>
-              </Select>
-            </FormControl>
-            <TextField
-              fullWidth
-              label="Add Component"
-              margin="normal"
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  const value = (e.target as HTMLInputElement).value;
-                  if (value) {
-                    updateProjectData('architecture', {
-                      ...projectData.architecture,
-                      components: [...projectData.architecture.components, value],
-                    });
-                    (e.target as HTMLInputElement).value = '';
-                  }
-                }
-              }}
-              helperText="Press Enter to add architectural components"
-            />
-            <Box mt={2}>
-              {projectData.architecture.components.map((comp: string, index: number) => (
-                <Chip key={index} label={comp} style={{ margin: 4 }} />
-              ))}
-            </Box>
-          </Box>
-        );
-
-      case 6: // Review
-        return (
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              Project Summary
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <Typography variant="subtitle1">Basic Info</Typography>
-                <Typography variant="body2">Name: {projectData.name}</Typography>
-                <Typography variant="body2">Path: {projectData.path}</Typography>
-                <Typography variant="body2">Description: {projectData.description}</Typography>
-              </Grid>
-              <Grid item xs={12}>
-                <Typography variant="subtitle1">Technology Stack</Typography>
-                <Box>
-                  {projectData.techStack.map((tech: string) => (
-                    <Chip key={tech} label={tech} size="small" style={{ margin: 2 }} />
-                  ))}
-                </Box>
-              </Grid>
-              <Grid item xs={12}>
-                <Typography variant="subtitle1">Goals ({projectData.goals.length})</Typography>
-                {projectData.goals.map((goal: any) => (
-                  <Typography key={goal.id} variant="body2">
-                    • {goal.description}
-                  </Typography>
-                ))}
-              </Grid>
-            </Grid>
-          </Box>
+          <ReviewWithValidation
+            config={projectConfig}
+            onEdit={handleEditSection}
+            onGenerate={handleGenerateProject}
+            onSave={handleSaveAsTemplate}
+            isGenerating={isGenerating}
+          />
         );
 
       default:
         return null;
     }
-  };
+  }, [
+    steps,
+    mode,
+    experience,
+    projectConfig,
+    isGenerating,
+    handleProjectTypeSelect,
+    handleTemplateSelect,
+    handleSkipTemplate,
+    handleEditSection,
+    handleGenerateProject,
+    handleSaveAsTemplate,
+  ]);
+
+  const isStepCompleted = useCallback((stepId: string): boolean => {
+    switch (stepId) {
+      case 'mode': return true;
+      case 'info': return !!projectConfig.name && !!projectConfig.path;
+      case 'type': return !!projectConfig.type;
+      case 'template': return true; // Optional step
+      case 'techstack': return projectConfig.techStack.length > 0;
+      case 'goals': return (projectConfig.goals?.length || 0) > 0;
+      case 'testing': return !!projectConfig.testingStrategy;
+      case 'architecture': return !!projectConfig.architecture;
+      case 'complexity': return true; // View-only step
+      case 'config': return !!projectConfig.type && projectConfig.techStack.length > 0;
+      case 'review': return true;
+      default: return false;
+    }
+  }, [projectConfig]);
+
+  const canProceed = useMemo(() => {
+    if (!steps[activeStep]) return false;
+    const currentStepId = steps[activeStep].id;
+    return isStepCompleted(currentStepId) || currentStepId === 'template' || currentStepId === 'complexity';
+  }, [steps, activeStep, isStepCompleted]);
 
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>
-        Initialize New Project
-      </Typography>
-      <Paper elevation={3} sx={{ p: 3, mt: 2 }}>
-        <Stepper activeStep={activeStep} orientation="vertical">
-          {steps.map((label, index) => (
-            <Step key={label}>
-              <StepLabel>{label}</StepLabel>
-              <StepContent>
-                {renderStepContent(index)}
-                <Box sx={{ mb: 2, mt: 2 }}>
+    <Box sx={{ px: { xs: 2, sm: 3, md: 4 }, overflowX: 'hidden' }}>
+      <Box sx={{ py: { xs: 2, sm: 3, md: 4 } }}>
+        {/* Header */}
+        <Box sx={{ mb: { xs: 2, sm: 3, md: 4 } }}>
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between', 
+            alignItems: { xs: 'stretch', sm: 'center' }, 
+            gap: 2,
+            mb: 2 
+          }}>
+            <Typography 
+              variant="h3" 
+              fontWeight="bold"
+              sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '3rem' } }}
+            >
+              Create New Project
+            </Typography>
+            <Button
+              variant="outlined"
+              color="secondary"
+              startIcon={<AutoAwesome />}
+              onClick={() => {
+                // Load the demo template
+                const demoTemplate = PROJECT_TEMPLATES['init-demo'];
+                // Set the project config without auto-advancing
+                setProjectConfig(prev => ({
+                  ...prev,
+                  name: demoTemplate.name,
+                  path: `~/projects/${demoTemplate.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`,
+                  description: demoTemplate.description,
+                  techStack: demoTemplate.techStack,
+                  goals: demoTemplate.goals.map((goal, index) => ({
+                    id: `goal-${index}`,
+                    text: goal.description,
+                    priority: goal.priority,
+                    category: 'custom' as const,
+                  })),
+                  architecture: {
+                    ...prev.architecture,
+                    pattern: (demoTemplate.architecture as any).type || (demoTemplate.architecture as any).pattern || 'monolithic',
+                  },
+                  testingStrategy: {
+                    ...prev.testingStrategy,
+                    ...demoTemplate.testing,
+                  },
+                }));
+                toast.success('Demo project loaded! Review and click Generate to create.');
+                // Jump directly to review step
+                setActiveStep(steps.length - 1);
+              }}
+            >
+              Load Demo Project
+            </Button>
+          </Box>
+          <Typography variant="body1" color="text.secondary">
+            Let's set up your project with the right architecture, technologies, and best practices.
+          </Typography>
+        </Box>
+
+        <Box>
+          {/* Main Content */}
+          <Box sx={{ width: '100%' }}>
+            {/* Progress Indicator */}
+            <LinearProgress
+              variant="determinate"
+              value={(activeStep / (steps.length - 1)) * 100}
+              sx={{ mb: 3, height: 6, borderRadius: 1 }}
+            />
+
+            {/* Stepper */}
+            {mode === 'guided' && (
+              <Paper elevation={1} sx={{ 
+                p: 2, 
+                mb: 3,
+                overflowX: 'auto',
+                '&::-webkit-scrollbar': { height: 8 },
+                '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.400', borderRadius: 1 }
+              }}>
+                <Stepper 
+                  activeStep={activeStep} 
+                  alternativeLabel
+                  sx={{ 
+                    minWidth: { xs: '600px', sm: 'auto' }
+                  }}
+                >
+                  {steps.map((step, index) => (
+                    <Step key={step.id} completed={isStepCompleted(step.id) && index < activeStep}>
+                      <StepLabel
+                        onClick={() => handleStepClick(index)}
+                        sx={{ 
+                          cursor: 'pointer',
+                          '& .MuiStepLabel-label': {
+                            fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                            display: { xs: 'none', sm: 'block' }
+                          }
+                        }}
+                        StepIconComponent={(props) => (
+                          <Tooltip title={step.label} arrow placement="top">
+                            <Box
+                              sx={{
+                                width: { xs: 28, sm: 32 },
+                                height: { xs: 28, sm: 32 },
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                bgcolor: props.active ? 'primary.main' : props.completed ? 'success.main' : 'grey.300',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                fontSize: { xs: '0.75rem', sm: '1rem' }
+                              }}
+                            >
+                              {props.completed ? <CheckCircle fontSize="small" /> : index + 1}
+                            </Box>
+                          </Tooltip>
+                        )}
+                      >
+                        {step.label}
+                      </StepLabel>
+                    </Step>
+                  ))}
+                </Stepper>
+              </Paper>
+            )}
+
+            {/* Step Content */}
+            <Fade in key={activeStep}>
+              <Paper elevation={2} sx={{ 
+                p: { xs: 2, sm: 3, md: 4 },
+                overflow: 'hidden'
+              }}>
+                {getStepContent(activeStep)}
+              </Paper>
+            </Fade>
+
+            {/* Navigation */}
+            <Box sx={{ 
+              mt: 3, 
+              display: 'flex', 
+              flexDirection: { xs: 'column', sm: 'row' },
+              justifyContent: 'space-between',
+              gap: 2
+            }}>
+              <Button
+                startIcon={<NavigateBefore />}
+                onClick={handleBack}
+                disabled={activeStep === 0}
+                size="large"
+                sx={{ width: { xs: '100%', sm: 'auto' } }}
+              >
+                Back
+              </Button>
+
+              <Box sx={{ 
+                display: 'flex', 
+                gap: 2,
+                justifyContent: { xs: 'space-between', sm: 'flex-end' },
+                width: { xs: '100%', sm: 'auto' }
+              }}>
+                <Tooltip title="Toggle AI Assistant">
+                  <IconButton
+                    onClick={() => setShowAssistant(!showAssistant)}
+                    color={showAssistant ? 'primary' : 'default'}
+                  >
+                    <HelpOutline />
+                  </IconButton>
+                </Tooltip>
+
+                {activeStep === steps.length - 1 ? (
                   <Button
                     variant="contained"
-                    onClick={index === steps.length - 1 ? handleCreateProject : handleNext}
-                    sx={{ mt: 1, mr: 1 }}
+                    size="large"
+                    onClick={handleGenerateProject}
+                    disabled={isGenerating}
+                    startIcon={isGenerating ? null : <AutoAwesome />}
+                    sx={{ width: { xs: '100%', sm: 'auto' } }}
                   >
-                    {index === steps.length - 1 ? 'Create Project' : 'Continue'}
+                    {isGenerating ? 'Generating...' : 'Generate Project'}
                   </Button>
-                  <Button disabled={index === 0} onClick={handleBack} sx={{ mt: 1, mr: 1 }}>
-                    Back
+                ) : (
+                  <Button
+                    variant="contained"
+                    endIcon={<NavigateNext />}
+                    onClick={handleNext}
+                    disabled={!canProceed}
+                    size="large"
+                    sx={{ width: { xs: '100%', sm: 'auto' } }}
+                  >
+                    Continue
                   </Button>
-                </Box>
-              </StepContent>
-            </Step>
-          ))}
-        </Stepper>
-      </Paper>
+                )}
+              </Box>
+            </Box>
+          </Box>
+
+          {/* AI Assistant Panel - Floating */}
+          {showAssistant && (
+            <ProjectAssistantPanel
+              projectType={projectConfig.type}
+              techStack={projectConfig.techStack}
+              currentStep={steps[activeStep].label}
+            />
+          )}
+        </Box>
+      </Box>
     </Box>
   );
 }

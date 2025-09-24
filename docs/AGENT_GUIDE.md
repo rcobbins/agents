@@ -1,7 +1,7 @@
 # Agent Framework - Agent Guide
 
 ## Overview
-This guide provides detailed information about each agent in the framework, their capabilities, interactions, and how to work with them effectively.
+This guide provides detailed information about each agent in the framework, their capabilities, interactions, and how to work with them effectively. Agents can be monitored and controlled through both CLI and the Web UI interface.
 
 ## The Five Core Agents
 
@@ -217,27 +217,50 @@ The quality enforcer and knowledge sharer.
 
 ### Starting Agents
 
-#### Individual Agent
+#### Web UI Method (Recommended)
 ```bash
+# Start web UI
+agent-framework web start
+
+# Navigate to http://localhost:3000
+# Use the Dashboard to:
+# - Start/stop individual agents
+# - Launch all agents at once
+# - View real-time status
+```
+
+#### CLI Method
+```bash
+# Start all agents
+agent-framework launch <project-path>
+
 # Start specific agent
 .agents/agents/planner.sh &
 
 # Check status
 cat .agents/status/planner.status
-```
 
-#### All Agents
-```bash
-# Use launcher
-/home/rob/agent-framework/launcher/cli/launch.sh
-
-# Or use start script
+# Or use project launcher
 .agents/start.sh
 ```
 
 ### Monitoring Agents
 
-#### Status Files
+#### Web UI Monitoring (Recommended)
+```bash
+# Start the web UI for visual monitoring
+agent-framework web start
+
+# Access dashboard at http://localhost:3000
+# Features:
+# - Real-time agent status
+# - Live log streaming
+# - Task queue visualization
+# - Performance metrics
+# - Message flow tracking
+```
+
+#### CLI Monitoring
 ```bash
 # Check agent status
 cat .agents/status/*.status | jq .
@@ -253,6 +276,9 @@ tail -f .agents/logs/coordinator*.log
 
 # Search across logs
 grep ERROR .agents/logs/*.log
+
+# View web UI logs
+agent-framework web logs
 ```
 
 #### Message Queue
@@ -262,13 +288,38 @@ ls .agents/inboxes/*/
 
 # View message content
 cat .agents/inboxes/coordinator/*.msg | jq .
+
+# Monitor via web UI
+# Go to http://localhost:3000/agents
 ```
 
 ### Controlling Agents
 
-#### Stop Agent
+#### Web UI Control
 ```bash
-# Graceful stop
+# Start web UI
+agent-framework web start
+
+# Go to http://localhost:3000/agents
+# Available controls:
+# - Start/Stop buttons for each agent
+# - Reset session options
+# - Priority adjustment
+# - Manual task assignment
+```
+
+#### CLI Control
+```bash
+# Stop all agents for a project
+agent-framework stop <project-path>
+
+# Reset agent session
+agent-framework reset-agent <agent-name> [soft|hard|archive]
+
+# Reset all agents
+agent-framework reset-all
+
+# Graceful stop (manual)
 echo "STOP" > .agents/inboxes/planner/STOP
 
 # Force stop
@@ -282,6 +333,9 @@ echo "HEALTH_CHECK" > .agents/inboxes/planner/HEALTH_CHECK
 
 # Check response
 cat .agents/outboxes/planner/health_*
+
+# Or view in web UI dashboard
+# http://localhost:3000 - Health indicators shown for each agent
 ```
 
 ## Agent Customization
@@ -471,6 +525,46 @@ sleep 5
 - Monitor resource usage
 - Scale appropriately
 
+## Web UI Integration
+
+### Real-Time Monitoring
+
+The Web UI provides comprehensive real-time monitoring:
+
+```javascript
+// WebSocket events for agent updates
+socket.on('agent:update', (data) => {
+  // data.agentId - Which agent
+  // data.status - Current status
+  // data.task - Current task
+  // data.metrics - Performance data
+});
+
+// Task progress tracking
+socket.on('task:progress', (data) => {
+  // data.taskId
+  // data.progress (0-100)
+  // data.agent
+});
+```
+
+### Agent Control Panel
+
+The web UI at http://localhost:3000/agents provides:
+- **Status Overview**: All agents at a glance
+- **Individual Controls**: Start/stop/restart per agent
+- **Session Management**: Reset and archive options
+- **Task Assignment**: Manual task override
+- **Performance Graphs**: CPU, memory, execution time
+
+### Integration Benefits
+
+1. **Unified View**: See all agents and projects in one place
+2. **Real-Time Updates**: No need to refresh or tail logs
+3. **Visual Task Flow**: See how tasks move between agents
+4. **Historical Data**: Track performance over time
+5. **Remote Management**: Control agents from browser
+
 ## Advanced Topics
 
 ### AI Integration
@@ -485,6 +579,18 @@ ask_claude() {
 
 # Enhanced analysis
 result=$(ask_claude "Analyze this code for issues: $code")
+```
+
+### Web UI AI Assistant
+
+The web UI includes AI assistance:
+```javascript
+// Available at http://localhost:3001/api/assistant
+POST /api/assistant/suggest
+{
+  "context": "project_context",
+  "query": "How should I structure this feature?"
+}
 ```
 
 ### Distributed Agents
@@ -513,3 +619,4 @@ done
 ---
 *For initialization help, see [Initialization Guide](INITIALIZATION.md)*
 *For API details, see [API Documentation](API.md)*
+*For Web UI guide, see [Web UI Guide](WEB_UI_GUIDE.md)*

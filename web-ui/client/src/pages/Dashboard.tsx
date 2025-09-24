@@ -29,6 +29,13 @@ function Dashboard() {
 
   useEffect(() => {
     loadProjects();
+    
+    // Set up periodic refresh every 15 seconds
+    const interval = setInterval(() => {
+      loadProjects();
+    }, 15000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadProjects = async () => {

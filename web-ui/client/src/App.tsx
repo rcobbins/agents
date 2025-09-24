@@ -35,8 +35,9 @@ function App() {
         <Layout>
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/project/:id" element={<ProjectDetail />} />
             <Route path="/project/new" element={<ProjectInit />} />
+            <Route path="/project/init" element={<ProjectInit />} />
+            <Route path="/project/:id" element={<ProjectDetail />} />
             <Route path="/agents/:projectId" element={<AgentMonitor />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>

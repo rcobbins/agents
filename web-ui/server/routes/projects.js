@@ -5,7 +5,16 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const projects = req.app.locals.projectManager.getAllProjects();
-    res.json({ projects });
+    // Enhance each project with real-time agent data
+    const enhancedProjects = projects.map(project => {
+      const projectState = req.app.locals.projectManager.getProjectState(project.id);
+      return {
+        ...project,
+        agents: projectState?.agents || [],
+        metrics: projectState?.metrics || { activeAgents: 0 }
+      };
+    });
+    res.json({ projects: enhancedProjects });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -14,7 +23,7 @@ router.get('/', async (req, res) => {
 // GET specific project
 router.get('/:id', async (req, res) => {
   try {
-    const project = req.app.locals.projectManager.getProject(req.params.id);
+    const project = req.app.locals.projectManager.getProjectState(req.params.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }

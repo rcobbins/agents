@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
 
@@ -31,8 +31,8 @@ class AgentManager {
       throw new Error(`Agent script not found: ${agentType}`);
     }
 
-    // Spawn agent process
-    const agentProcess = spawn('bash', [agentScript], {
+    // Spawn bash directly without shell option to avoid /bin/sh ENOENT issues
+    const agentProcess = spawn('/bin/bash', [agentScript], {
       cwd: config.projectPath || process.cwd(),
       env: {
         ...process.env,
@@ -40,9 +40,12 @@ class AgentManager {
         AGENT_TYPE: agentType,
         PROJECT_PATH: config.projectPath || process.cwd(),
         DEBUG: config.debug || false,
+        HOME: process.env.HOME,
+        PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
         ...config.env
       },
-      detached: false
+      detached: false,
+      stdio: ['pipe', 'pipe', 'pipe']
     });
 
     // Create agent record

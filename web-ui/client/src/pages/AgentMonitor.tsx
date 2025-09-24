@@ -36,6 +36,18 @@ function AgentMonitor() {
     if (projectId) {
       loadAgents();
       connectWebSocket();
+      
+      // Set up periodic refresh every 10 seconds
+      const interval = setInterval(() => {
+        loadAgents();
+      }, 10000);
+
+      return () => {
+        clearInterval(interval);
+        if (projectId) {
+          socketService.leaveProject(projectId);
+        }
+      };
     }
 
     return () => {
@@ -44,6 +56,13 @@ function AgentMonitor() {
       }
     };
   }, [projectId]);
+
+  // Load existing logs after agents are loaded
+  useEffect(() => {
+    if (Object.keys(agents).length > 0) {
+      loadExistingLogs();
+    }
+  }, [agents]);
 
   const loadAgents = async () => {
     try {
@@ -58,6 +77,31 @@ function AgentMonitor() {
     }
   };
 
+  const loadExistingLogs = async () => {
+    try {
+      const logPromises = Object.keys(agents).map(async (agentId) => {
+        if (agents[agentId].status === 'running') {
+          const response = await api.get(`/agents/${projectId}/${agentId}/logs?lines=50`);
+          return { agentId, logs: response.data.logs || [] };
+        }
+        return { agentId, logs: [] };
+      });
+
+      const results = await Promise.all(logPromises);
+      const newLogs: Record<string, string[]> = {};
+      
+      results.forEach(({ agentId, logs: agentLogs }) => {
+        if (agentLogs.length > 0) {
+          newLogs[agentId] = agentLogs;
+        }
+      });
+
+      setLogs(prev => ({ ...prev, ...newLogs }));
+    } catch (error) {
+      console.error('Failed to load existing logs:', error);
+    }
+  };
+
   const connectWebSocket = () => {
     socketService.connect();
     socketService.joinProject(projectId!);
@@ -67,7 +111,8 @@ function AgentMonitor() {
         ...prev,
         [data.agentId]: {
           ...prev[data.agentId],
-          status: data.status,
+          // Extract string status from object if needed
+          status: typeof data.status === 'object' ? data.status.status : data.status,
         },
       }));
     });

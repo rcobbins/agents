@@ -21,6 +21,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 # Version
@@ -39,14 +40,23 @@ show_usage() {
     echo "  validate <path>    Validate project setup"
     echo "  stop <path>        Stop all agents for a project"
     echo "  monitor <path>     Monitor running agents"
-    echo "  web                Start the web UI server"
+    echo "  web <command>      Manage the web UI server"
+    echo "    start            Start web UI in background"
+    echo "    stop             Stop web UI services"
+    echo "    status           Check web UI status"
+    echo "    restart          Restart web UI services"
+    echo "    logs             View web UI logs"
+    echo "  reset-agent <name> Reset a specific agent's session"
+    echo "  reset-all          Reset all agent sessions"
+    echo "  list-sessions      List all active agent sessions"
     echo "  version            Show version information"
     echo "  help               Show this help message"
     echo ""
     echo "Examples:"
     echo "  agent-framework init /path/to/project"
     echo "  agent-framework launch /path/to/project"
-    echo "  agent-framework web"
+    echo "  agent-framework web start"
+    echo "  agent-framework web stop"
 }
 
 # Parse command
@@ -103,51 +113,180 @@ case "$COMMAND" in
         ;;
         
     web)
-        # Start web UI (both frontend and backend)
-        echo -e "${BLUE}Starting Agent Framework Web UI...${NC}"
-        echo -e "${CYAN}Frontend: http://localhost:3000${NC}"
-        echo -e "${CYAN}Backend API: http://localhost:3001${NC}"
-        echo ""
+        # Source runtime manager
+        source "$FRAMEWORK_DIR/utils/runtime-manager.sh"
         
-        # Check and install server dependencies
-        if [ ! -d "$FRAMEWORK_DIR/web-ui/server/node_modules" ]; then
-            echo -e "${YELLOW}Installing server dependencies...${NC}"
-            cd "$FRAMEWORK_DIR/web-ui/server"
-            npm install
+        # Parse web subcommand
+        SUBCOMMAND="${1:-status}"
+        shift || true
+        
+        case "$SUBCOMMAND" in
+            start)
+                echo -e "${BLUE}Starting Agent Framework Web UI...${NC}"
+                
+                # Clean up any stale PID files
+                cleanup_stale_pids
+                
+                # Check if already running
+                if is_service_running "web-server" || is_service_running "web-client"; then
+                    echo -e "${YELLOW}Web UI services are already running${NC}"
+                    display_service_status "web-server" "3001"
+                    display_service_status "web-client" "3000"
+                    exit 0
+                fi
+                
+                # Check port availability
+                if ! is_port_available 3001; then
+                    echo -e "${RED}Port 3001 is already in use${NC}"
+                    exit 1
+                fi
+                if ! is_port_available 3000; then
+                    echo -e "${RED}Port 3000 is already in use${NC}"
+                    exit 1
+                fi
+                
+                # Check and install server dependencies
+                if [ ! -d "$FRAMEWORK_DIR/web-ui/server/node_modules" ]; then
+                    echo -e "${YELLOW}Installing server dependencies...${NC}"
+                    cd "$FRAMEWORK_DIR/web-ui/server"
+                    npm install
+                fi
+                
+                # Check and install client dependencies
+                if [ ! -d "$FRAMEWORK_DIR/web-ui/client/node_modules" ]; then
+                    echo -e "${YELLOW}Installing client dependencies...${NC}"
+                    cd "$FRAMEWORK_DIR/web-ui/client"
+                    npm install
+                fi
+                
+                # Start backend server
+                echo -e "${CYAN}Starting backend server on port 3001...${NC}"
+                cd "$FRAMEWORK_DIR/web-ui/server"
+                nohup npm start > "$FRAMEWORK_DIR/logs/web-server.log" 2>&1 &
+                SERVER_PID=$!
+                save_pid "web-server" "$SERVER_PID"
+                
+                # Start frontend
+                echo -e "${CYAN}Starting frontend on port 3000...${NC}"
+                cd "$FRAMEWORK_DIR/web-ui/client"
+                nohup npm run dev > "$FRAMEWORK_DIR/logs/web-client.log" 2>&1 &
+                CLIENT_PID=$!
+                save_pid "web-client" "$CLIENT_PID"
+                
+                # Wait for services to be ready
+                sleep 2
+                
+                # Check if services started successfully
+                if is_service_running "web-server" && is_service_running "web-client"; then
+                    echo -e "${GREEN}✓ Web UI started successfully${NC}"
+                    echo -e "${CYAN}Frontend: http://localhost:3000${NC}"
+                    echo -e "${CYAN}Backend API: http://localhost:3001${NC}"
+                    echo ""
+                    echo "Use 'agent-framework web stop' to stop the services"
+                else
+                    echo -e "${RED}Failed to start web UI services${NC}"
+                    stop_service "web-server"
+                    stop_service "web-client"
+                    exit 1
+                fi
+                ;;
+                
+            stop)
+                echo -e "${YELLOW}Stopping Agent Framework Web UI...${NC}"
+                stop_service "web-client"
+                stop_service "web-server"
+                echo -e "${GREEN}✓ Web UI stopped${NC}"
+                ;;
+                
+            status)
+                echo -e "${BLUE}Agent Framework Web UI Status${NC}"
+                echo ""
+                display_service_status "web-server" "3001"
+                display_service_status "web-client" "3000"
+                ;;
+                
+            restart)
+                echo -e "${YELLOW}Restarting Agent Framework Web UI...${NC}"
+                $0 web stop
+                sleep 2
+                $0 web start
+                ;;
+                
+            logs)
+                echo -e "${BLUE}Web UI Logs${NC}"
+                echo -e "${CYAN}Press Ctrl+C to exit${NC}"
+                echo ""
+                
+                # Check if log files exist
+                if [ -f "$FRAMEWORK_DIR/logs/web-server.log" ] || [ -f "$FRAMEWORK_DIR/logs/web-client.log" ]; then
+                    tail -f "$FRAMEWORK_DIR/logs/web-server.log" "$FRAMEWORK_DIR/logs/web-client.log" 2>/dev/null
+                else
+                    echo -e "${YELLOW}No log files found. Start the web UI first.${NC}"
+                fi
+                ;;
+                
+            *)
+                echo -e "${RED}Unknown web command: $SUBCOMMAND${NC}"
+                echo ""
+                echo "Usage: agent-framework web <command>"
+                echo "Commands:"
+                echo "  start    - Start web UI in background"
+                echo "  stop     - Stop web UI services"
+                echo "  status   - Check web UI status"
+                echo "  restart  - Restart web UI services"
+                echo "  logs     - View web UI logs"
+                exit 1
+                ;;
+        esac
+        ;;
+        
+    reset-agent)
+        # Reset a specific agent's session
+        if [ -z "$1" ]; then
+            echo -e "${RED}Error: Agent name required${NC}"
+            echo "Usage: agent-framework reset-agent <agent-name> [soft|hard|archive]"
+            echo "Available agents: coordinator, planner, coder, tester, reviewer, ui-assistant"
+            exit 1
         fi
         
-        # Check and install client dependencies
-        if [ ! -d "$FRAMEWORK_DIR/web-ui/client/node_modules" ]; then
-            echo -e "${YELLOW}Installing client dependencies...${NC}"
-            cd "$FRAMEWORK_DIR/web-ui/client"
-            npm install
-        fi
+        AGENT_NAME="$1"
+        MODE="${2:-soft}"  # soft, hard, archive
         
-        # Check and install main dependencies (for concurrently)
-        cd "$FRAMEWORK_DIR"
-        if [ ! -d "node_modules" ]; then
-            echo -e "${YELLOW}Installing main dependencies...${NC}"
-            npm install
-        fi
+        # Source session manager
+        source "$FRAMEWORK_DIR/agents/lib/session-manager.sh"
         
-        # Check if concurrently is available
-        if npm list concurrently >/dev/null 2>&1; then
-            echo -e "${GREEN}Starting both services with concurrently...${NC}"
-            npm run dev
+        echo -e "${YELLOW}Resetting $AGENT_NAME agent ($MODE mode)...${NC}"
+        reset_agent_session "$AGENT_NAME" "$MODE"
+        ;;
+        
+    reset-all)
+        # Reset all agent sessions
+        MODE="${1:-soft}"  # soft, hard, archive
+        
+        # Source session manager
+        source "$FRAMEWORK_DIR/agents/lib/session-manager.sh"
+        
+        echo -e "${YELLOW}Resetting all agent sessions ($MODE mode)...${NC}"
+        echo -e "${CYAN}This will affect: coordinator, planner, coder, tester, reviewer, ui-assistant${NC}"
+        echo -n "Continue? (y/N): "
+        read -r confirm
+        
+        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+            reset_all_sessions "$MODE"
+            echo -e "${GREEN}✓ All agent sessions reset${NC}"
         else
-            echo -e "${YELLOW}Starting services separately (concurrently not found)...${NC}"
-            echo -e "${CYAN}Starting backend server on port 3001...${NC}"
-            cd "$FRAMEWORK_DIR/web-ui/server"
-            npm start &
-            SERVER_PID=$!
-            
-            echo -e "${CYAN}Starting frontend on port 3000...${NC}"
-            cd "$FRAMEWORK_DIR/web-ui/client"
-            npm run dev
-            
-            # When frontend is stopped, also stop backend
-            kill $SERVER_PID 2>/dev/null
+            echo -e "${YELLOW}Cancelled${NC}"
         fi
+        ;;
+        
+    list-sessions)
+        # List all active agent sessions
+        # Source session manager
+        source "$FRAMEWORK_DIR/agents/lib/session-manager.sh"
+        
+        echo -e "${CYAN}Listing all agent sessions...${NC}"
+        echo ""
+        list_all_sessions
         ;;
         
     version|--version|-v)

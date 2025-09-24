@@ -184,12 +184,23 @@ handle_task() {
     # Specific agents will override this
 }
 
-# Function to use Claude if available
+# Load enhanced Claude helper if available
+FRAMEWORK_DIR="${FRAMEWORK_DIR:-/home/rob/agent-framework}"
+if [ -f "$FRAMEWORK_DIR/agents/lib/claude-helper.sh" ]; then
+    source "$FRAMEWORK_DIR/agents/lib/claude-helper.sh"
+fi
+
+# Legacy ask_claude function (backward compatibility)
 ask_claude() {
     local prompt="$1"
+    local context="${2:-}"
     
-    if command -v claude &> /dev/null; then
-        echo "$prompt" | claude 2>/dev/null
+    # Try to use enhanced version if available
+    if declare -f ask_claude_enhanced &>/dev/null; then
+        ask_claude_enhanced "$prompt" "$AGENT_NAME" "$context"
+    elif command -v claude &> /dev/null; then
+        # Fallback to simple claude with --print flag
+        claude --print "$prompt" 2>/dev/null
     else
         log_error "Claude CLI not available"
         echo "{\"error\": \"Claude CLI not available\"}"

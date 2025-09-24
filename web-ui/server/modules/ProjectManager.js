@@ -6,7 +6,12 @@ class ProjectManager {
   constructor(logger) {
     this.logger = logger;
     this.projects = new Map();
+    this.agentManager = null; // Will be set by server
     this.loadProjects();
+  }
+
+  setAgentManager(agentManager) {
+    this.agentManager = agentManager;
   }
 
   async loadProjects() {
@@ -40,44 +45,158 @@ class ProjectManager {
   }
 
   async createProject(projectData) {
+    // Map goals to ensure they have the correct field names
+    const mappedGoals = (projectData.goals || []).map((goal, index) => ({
+      id: goal.id || `goal_${index + 1}`,
+      description: goal.text || goal.description || '',  // Map 'text' to 'description'
+      status: goal.status || 'pending',
+      priority: goal.priority || 'medium',
+      category: goal.category,
+      metrics: goal.metrics || []
+    }));
+
     const project = {
       id: uuidv4(),
       name: projectData.name,
       path: projectData.path,
       description: projectData.description || '',
+      type: projectData.type || '',
+      techStack: projectData.techStack || [],
+      goals: mappedGoals,
+      vision: projectData.vision || {},
+      testingStrategy: projectData.testingStrategy || {},
+      architecture: projectData.architecture || {},
       created: new Date().toISOString(),
       updated: new Date().toISOString(),
-      status: 'inactive',
+      status: 'active',
       agents: [],
-      goals: [],
-      config: projectData.config || {}
+      config: projectData
     };
 
-    // Validate project path exists
+    // Create project directory if it doesn't exist
+    const projectPath = project.path.replace('~', process.env.HOME);
     try {
-      await fs.access(project.path);
+      await fs.access(projectPath);
+      this.logger.info(`Project directory already exists: ${projectPath}`);
     } catch (error) {
-      throw new Error(`Project path does not exist: ${project.path}`);
-    }
-
-    // Check for required files
-    const requiredFiles = ['PROJECT_SPEC.md', 'GOALS.json'];
-    for (const file of requiredFiles) {
-      const filePath = path.join(project.path, file);
+      // Directory doesn't exist, create it
       try {
-        await fs.access(filePath);
-      } catch (error) {
-        this.logger.warn(`Required file missing: ${file}`);
+        await fs.mkdir(projectPath, { recursive: true });
+        this.logger.info(`Created project directory: ${projectPath}`);
+      } catch (mkdirError) {
+        throw new Error(`Failed to create project directory: ${mkdirError.message}`);
       }
     }
 
-    // Load goals if available
+    // Create initial project files
     try {
-      const goalsPath = path.join(project.path, 'GOALS.json');
-      const goalsData = await fs.readFile(goalsPath, 'utf8');
-      project.goals = JSON.parse(goalsData);
+      // Create README.md
+      const readmeContent = `# ${project.name}
+
+${project.description}
+
+## Technology Stack
+${project.techStack.map(tech => `- ${tech}`).join('\n')}
+
+## Project Type
+${project.type}
+
+## Architecture
+- Pattern: ${project.architecture.pattern || 'Not specified'}
+- Database: ${project.architecture.database || 'Not specified'}
+
+## Goals
+${project.goals.map((goal, i) => `${i + 1}. ${goal.description || goal.text || goal}`).join('\n')}
+
+## Getting Started
+1. Install dependencies
+2. Configure environment variables
+3. Run development server
+
+Created with Agent Framework
+`;
+      await fs.writeFile(path.join(projectPath, 'README.md'), readmeContent);
+      
+      // Create PROJECT_SPEC.md
+      const specContent = `# Project Specification: ${project.name}
+
+## Overview
+${project.description}
+
+## Technical Requirements
+- Project Type: ${project.type}
+- Technology Stack: ${project.techStack.join(', ')}
+
+## Testing Strategy
+- Unit Test Coverage: ${project.testingStrategy.unitTestCoverage || 0}%
+- Frameworks: ${(project.testingStrategy.frameworks || []).join(', ') || 'None specified'}
+
+## Configuration
+\`\`\`json
+${JSON.stringify(projectData, null, 2)}
+\`\`\`
+`;
+      await fs.writeFile(path.join(projectPath, 'PROJECT_SPEC.md'), specContent);
+      
+      // Create GOALS.json
+      await fs.writeFile(
+        path.join(projectPath, 'GOALS.json'), 
+        JSON.stringify(project.goals, null, 2)
+      );
+      
+      // Create PROJECT_VISION.md if vision data is provided
+      if (project.vision && Object.keys(project.vision).length > 0) {
+        const visionContent = `# Project Vision: ${project.name}
+
+## Product Overview
+**Product Name:** ${project.vision.productName || project.name}
+**Tagline:** ${project.vision.tagline || 'Not specified'}
+**Product Type:** ${project.vision.productType || project.type || 'Not specified'}
+
+## Problem Statement
+${project.vision.problemStatement || 'Not specified'}
+
+## Target Audience
+${project.vision.targetAudience || 'Not specified'}
+
+## Core Features
+${(project.vision.coreFeatures || []).map(feature => `- ${feature}`).join('\n') || '- Not specified'}
+
+## Unique Value Proposition
+${project.vision.uniqueValue || 'Not specified'}
+
+## Success Metrics
+${(project.vision.successMetrics || []).map(metric => `- ${metric}`).join('\n') || '- Not specified'}
+
+## Constraints
+${(project.vision.constraints || []).map(constraint => `- ${constraint}`).join('\n') || '- None specified'}
+
+---
+*This vision document guides the development process and helps agents understand the product context.*
+`;
+        await fs.writeFile(path.join(projectPath, 'PROJECT_VISION.md'), visionContent);
+      }
+      
+      // Create basic directory structure
+      const directories = ['src', 'tests', 'docs', '.github'];
+      for (const dir of directories) {
+        await fs.mkdir(path.join(projectPath, dir), { recursive: true });
+      }
+      
+      // Create .gitignore
+      const gitignoreContent = `node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+.DS_Store
+`;
+      await fs.writeFile(path.join(projectPath, '.gitignore'), gitignoreContent);
+      
+      this.logger.info(`Created initial project files in: ${projectPath}`);
     } catch (error) {
-      this.logger.warn('Could not load GOALS.json:', error.message);
+      this.logger.error('Error creating project files:', error);
     }
 
     this.projects.set(project.id, project);
@@ -131,9 +250,16 @@ class ProjectManager {
       return null;
     }
 
+    // Get actual running agents
+    const agentStates = this.getAgentStates(projectId);
+    const runningAgentIds = agentStates
+      .filter(agent => agent.status === 'running')
+      .map(agent => agent.id);
+
     return {
       ...project,
-      agents: this.getAgentStates(projectId),
+      agents: runningAgentIds,  // Array of agent IDs for backward compatibility
+      agentStates: agentStates,  // Full agent state info
       metrics: this.calculateMetrics(project)
     };
   }
@@ -142,23 +268,32 @@ class ProjectManager {
     const project = this.projects.get(projectId);
     if (!project) return [];
 
-    // This would integrate with AgentManager
-    return project.agents.map(agentId => ({
-      id: agentId,
-      status: 'unknown',
-      lastActivity: null
-    }));
+    // Get actual agent states from IntegratedAgentManager
+    if (this.agentManager) {
+      const runningAgents = this.agentManager.getAllAgentsForProject(projectId);
+      return runningAgents;
+    }
+
+    // Fallback if agent manager not available
+    return [];
   }
 
   calculateMetrics(project) {
     const totalGoals = project.goals.length;
     const completedGoals = project.goals.filter(g => g.status === 'completed').length;
     
+    // Get actual running agents count
+    let activeAgents = 0;
+    if (this.agentManager) {
+      const runningAgents = this.agentManager.getAllAgentsForProject(project.id);
+      activeAgents = runningAgents.filter(a => a.status === 'running').length;
+    }
+    
     return {
       totalGoals,
       completedGoals,
       progress: totalGoals > 0 ? (completedGoals / totalGoals) * 100 : 0,
-      activeAgents: project.agents.length
+      activeAgents
     };
   }
 

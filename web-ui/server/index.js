@@ -10,7 +10,8 @@ const fs = require('fs');
 
 // Import modules
 const ProjectManager = require('./modules/ProjectManager');
-const AgentManager = require('./modules/AgentManager');
+const IntegratedAgentManager = require('./modules/IntegratedAgentManager'); // Using integrated agents to avoid spawn issues
+const InMemoryMessageQueue = require('./agents/InMemoryMessageQueue');
 const MessageBroker = require('./modules/MessageBroker');
 const FileWatcher = require('./modules/FileWatcher');
 const Logger = require('./modules/Logger');
@@ -20,6 +21,7 @@ const projectRoutes = require('./routes/projects');
 const agentRoutes = require('./routes/agents');
 const messageRoutes = require('./routes/messages');
 const statusRoutes = require('./routes/status');
+const assistantRoutes = require('./routes/assistant');
 
 // Initialize express app
 const app = express();
@@ -53,14 +55,44 @@ if (process.env.NODE_ENV === 'production') {
 // Initialize managers
 const logger = new Logger();
 const projectManager = new ProjectManager(logger);
-const agentManager = new AgentManager(logger);
+
+// Initialize integrated agent system
+const messageQueue = new InMemoryMessageQueue();
+const agentLauncher = new IntegratedAgentManager(logger);
+agentLauncher.setMessageQueue(messageQueue);
+
+// Link managers together
+projectManager.setAgentManager(agentLauncher);
+
+// Forward agent events to WebSocket clients
+agentLauncher.on('agentLog', (data) => {
+  // Broadcast to all clients in the project room
+  io.to(`project:${data.projectId}`).emit('agent:log', {
+    agentId: data.agentId,
+    message: data.message,
+    timestamp: data.log?.timestamp || new Date().toISOString()
+  });
+});
+
+agentLauncher.on('agentStatus', (data) => {
+  const [projectId, agentId] = data.agentKey.split(':');
+  // Extract string status if it's an object
+  const status = typeof data.status === 'object' && data.status.status ? data.status.status : data.status;
+  io.to(`project:${projectId}`).emit('agent:status', {
+    agentId: agentId,
+    status: status
+  });
+});
+
 const messageBroker = new MessageBroker(logger);
 const fileWatcher = new FileWatcher(logger);
 
 // Make managers available to routes
 app.locals.projectManager = projectManager;
-app.locals.agentManager = agentManager;
+app.locals.agentManager = agentLauncher; // Keep the same name for compatibility
+app.locals.agentLauncher = agentLauncher;
 app.locals.messageBroker = messageBroker;
+app.locals.messageQueue = messageQueue; // Expose the in-memory queue
 app.locals.io = io;
 
 // Root route
@@ -74,7 +106,8 @@ app.get('/', (req, res) => {
       projects: '/api/projects',
       agents: '/api/agents',
       messages: '/api/messages',
-      status: '/api/status'
+      status: '/api/status',
+      assistant: '/api/assistant'
     },
     websocket: 'Connect via Socket.IO for real-time updates',
     documentation: 'https://github.com/rcobbins/agents'
@@ -86,6 +119,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/agents', agentRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/status', statusRoutes);
+app.use('/api/assistant', assistantRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -120,7 +154,7 @@ io.on('connection', (socket) => {
   // Agent control
   socket.on('agent:launch', async (data) => {
     try {
-      const result = await agentManager.launchAgent(data.projectId, data.agentType, data.config);
+      const result = await agentLauncher.launchAgent(data.projectId, data.agentType, data.config);
       socket.emit('agent:launched', result);
       io.to(`project:${data.projectId}`).emit('agent:status', {
         agentId: data.agentType,
@@ -133,7 +167,7 @@ io.on('connection', (socket) => {
   
   socket.on('agent:stop', async (data) => {
     try {
-      await agentManager.stopAgent(data.projectId, data.agentId);
+      await agentLauncher.stopAgent(data.projectId, data.agentId);
       io.to(`project:${data.projectId}`).emit('agent:status', {
         agentId: data.agentId,
         status: 'stopped'
@@ -220,14 +254,17 @@ server.listen(PORT, HOST, () => {
   fileWatcher.initializeDefaultWatchers();
   
   // Start agent health checks
-  agentManager.startHealthChecks();
+  // Start health checks if available
+  if (typeof agentLauncher.startHealthChecks === 'function') {
+    agentLauncher.startHealthChecks();
+  }
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully...');
   server.close(() => {
-    agentManager.stopAllAgents();
+    agentLauncher.stopAllAgents();
     fileWatcher.stopAllWatchers();
     logger.info('Server closed');
     process.exit(0);
@@ -237,7 +274,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully...');
   server.close(() => {
-    agentManager.stopAllAgents();
+    agentLauncher.stopAllAgents();
     fileWatcher.stopAllWatchers();
     logger.info('Server closed');
     process.exit(0);

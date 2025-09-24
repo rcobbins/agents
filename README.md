@@ -5,13 +5,15 @@ A powerful, autonomous multi-agent system for software development automation. T
 ## 🌟 Features
 
 - **Five Specialized Agents**: Coordinator, Planner, Tester, Coder, and Reviewer working in harmony
+- **Web UI Dashboard**: Interactive interface for agent management and monitoring
 - **Project Goal Tracking**: Define goals and watch agents work toward them autonomously
 - **Automatic Testing**: Continuous test execution and coverage monitoring
 - **Code Quality Assurance**: Automated code review and standards enforcement
 - **Any Language Support**: Works with JavaScript, Python, Go, Java, Rust, and more
 - **AI-Powered** (Optional): Enhanced with Claude AI for intelligent decision-making
 - **Project Initialization Wizard**: Quick setup for any project
-- **Real-time Monitoring**: Track agent progress and system health
+- **Real-time Monitoring**: Track agent progress and system health via CLI or Web UI
+- **Non-Blocking Operation**: Run web UI in background while continuing other work
 
 ## 🚀 Quick Start
 
@@ -22,6 +24,8 @@ A powerful, autonomous multi-agent system for software development automation. T
 cd /path/to/your/project
 
 # Run the initialization wizard
+agent-framework init .
+# Or use the direct path
 /home/rob/agent-framework/init/wizard.sh
 ```
 
@@ -37,6 +41,8 @@ The wizard will guide you through:
 
 ```bash
 # Check if your project is ready
+agent-framework validate .
+# Or use the direct path
 /home/rob/agent-framework/init/validators/check-readiness.sh
 ```
 
@@ -44,11 +50,44 @@ The wizard will guide you through:
 
 ```bash
 # Start the agents
+agent-framework launch .
+# Or use the direct path
 /home/rob/agent-framework/launcher/cli/launch.sh
 
 # Or use the project-specific launcher
 .agents/start.sh
 ```
+
+### 4. Start Web UI (Optional)
+
+```bash
+# Start the web interface in background (non-blocking)
+agent-framework web start
+
+# The web UI will be available at:
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:3001
+
+# Check web UI status
+agent-framework web status
+
+# View web UI logs
+agent-framework web logs
+
+# Restart web UI
+agent-framework web restart
+
+# Stop the web interface when done
+agent-framework web stop
+```
+
+The Web UI provides:
+- **Real-time Dashboard**: Monitor all agents and their activities
+- **Project Management**: Create and configure projects visually
+- **Task Queue Visualization**: See pending, active, and completed tasks
+- **Agent Control Panel**: Start, stop, and reset agents individually
+- **Live Log Streaming**: View agent outputs in real-time
+- **Goal Progress Tracking**: Visual representation of goal completion
 
 ## 📦 Installation
 
@@ -77,10 +116,14 @@ pip install anthropic
 cd /home/rob
 git clone [repository-url] agent-framework
 
-# Make scripts executable
-chmod +x agent-framework/init/wizard.sh
-chmod +x agent-framework/init/validators/check-readiness.sh
-chmod +x agent-framework/launcher/cli/launch.sh
+# Make the main CLI executable
+chmod +x agent-framework/bin/agent-framework
+
+# Add to PATH for easy access (optional)
+echo 'export PATH="$HOME/agent-framework/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Now you can use 'agent-framework' from anywhere
 ```
 
 ## 🤖 The Five Agents
@@ -191,20 +234,31 @@ Global settings in `/home/rob/agent-framework/config/default.conf`:
 
 ## 📊 Monitoring
 
-### View Agent Status
+### Web UI Monitoring (Recommended)
 ```bash
+# Start the web UI for visual monitoring
+agent-framework web start
+
+# Open your browser to http://localhost:3000
+# The dashboard provides real-time updates
+```
+
+### CLI Monitoring
+```bash
+# View Agent Status
 # In the launcher menu, select option 3
 # Or check status files
 cat .agents/status/*.status
-```
 
-### View Logs
-```bash
-# Tail all agent logs
+# View Logs
 tail -f .agents/logs/*.log
 
 # View specific agent log
 tail -f .agents/logs/coordinator*.log
+
+# Monitor web UI services
+agent-framework web status
+agent-framework web logs
 ```
 
 ### Progress Reports
@@ -218,8 +272,15 @@ ls .agents/workspace/*/completed/
 
 ## 🛠️ Troubleshooting
 
+### Web UI Issues
+1. Check if services are running: `agent-framework web status`
+2. Verify ports 3000 and 3001 are available
+3. Check logs: `agent-framework web logs`
+4. Try restarting: `agent-framework web restart`
+5. Ensure Node.js and npm are installed
+
 ### Agents Not Starting
-1. Run validation: `/home/rob/agent-framework/init/validators/check-readiness.sh`
+1. Run validation: `agent-framework validate .`
 2. Check prerequisites are installed
 3. Ensure scripts are executable
 4. Review logs for errors
@@ -316,13 +377,17 @@ The Agent Framework has been successfully used for:
 
 ## 🚧 Roadmap
 
-- [ ] Web-based monitoring dashboard
+- [x] Web-based monitoring dashboard
+- [x] Non-blocking web UI with start/stop commands
 - [ ] Cloud-based agent hosting
 - [ ] Plugin system for custom agents
 - [ ] Multi-project orchestration
 - [ ] Performance analytics
 - [ ] Integration with more AI models
 - [ ] Visual workflow editor
+- [ ] WebSocket real-time updates
+- [ ] Agent performance metrics
+- [ ] Task dependency visualization
 
 ---
 

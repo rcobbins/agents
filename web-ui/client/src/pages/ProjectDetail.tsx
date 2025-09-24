@@ -124,7 +124,7 @@ function ProjectDetail() {
                     }
                   >
                     <ListItemText
-                      primary={goal.description}
+                      primary={goal.description || (goal as any).text || 'No description'}
                       secondary={
                         <Box>
                           <Chip

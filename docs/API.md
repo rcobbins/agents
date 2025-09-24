@@ -113,6 +113,66 @@ restart_agent "agent_id" ["new_config"]
 
 ## Web UI API
 
+### Web UI Management Commands
+
+#### Start Web UI
+Starts the web interface services in the background (non-blocking).
+
+```bash
+agent-framework web start
+```
+
+Starts:
+- Frontend development server on port 3000
+- Backend API server on port 3001
+
+Returns: Success message with service URLs
+
+#### Stop Web UI
+Gracefully stops all web UI services.
+
+```bash
+agent-framework web stop
+```
+
+Actions:
+- Sends SIGTERM to processes
+- Waits for graceful shutdown
+- Cleans up PID files
+
+#### Check Web UI Status
+Shows current status of web UI services.
+
+```bash
+agent-framework web status
+```
+
+Returns:
+- Service states (running/stopped)
+- Process IDs
+- Port numbers
+
+#### Restart Web UI
+Restarts all web UI services.
+
+```bash
+agent-framework web restart
+```
+
+Equivalent to stop followed by start.
+
+#### View Web UI Logs
+Streams web UI service logs in real-time.
+
+```bash
+agent-framework web logs
+```
+
+Shows:
+- Backend server logs
+- Frontend build/dev logs
+- Press Ctrl+C to exit
+
 ### REST Endpoints
 
 #### GET /api/projects
@@ -205,9 +265,16 @@ Request:
 
 #### Connection
 ```javascript
-socket.connect({
-  projectId: 'project-uuid',
-  auth: 'token'
+const socket = io('http://localhost:3001', {
+  auth: {
+    token: 'your-auth-token'
+  },
+  transports: ['websocket', 'polling']
+});
+
+socket.on('connect', () => {
+  console.log('Connected to Agent Framework');
+  socket.emit('subscribe', { projectId: 'project-uuid' });
 });
 ```
 
@@ -255,16 +322,37 @@ socket.on('error', (data) => {
 
 ## CLI Commands
 
+### Web UI Management
+```bash
+# Start web UI in background (non-blocking)
+agent-framework web start
+
+# Stop web UI services
+agent-framework web stop
+
+# Check web UI status
+agent-framework web status
+
+# Restart web UI services
+agent-framework web restart
+
+# View web UI logs
+agent-framework web logs
+```
+
 ### Project Management
 ```bash
 # Initialize new project
 agent-framework init <project-path>
 
+# Initialize demo project
+agent-framework init-demo <project-path>
+
 # Validate project setup
 agent-framework validate <project-path>
 
-# List projects
-agent-framework list
+# List projects (via web UI)
+curl http://localhost:3001/api/projects
 ```
 
 ### Agent Control
@@ -272,14 +360,20 @@ agent-framework list
 # Launch all agents
 agent-framework launch <project-path>
 
-# Launch specific agent
-agent-framework launch <project-path> --agent <agent-type>
-
-# Stop agents
+# Stop all agents for a project
 agent-framework stop <project-path>
 
-# Monitor agents
+# Monitor agents via CLI
 agent-framework monitor <project-path>
+
+# Reset specific agent session
+agent-framework reset-agent <agent-name> [soft|hard|archive]
+
+# Reset all agent sessions
+agent-framework reset-all [soft|hard|archive]
+
+# List all active sessions
+agent-framework list-sessions
 ```
 
 ### Message Operations
@@ -316,8 +410,12 @@ agent-framework logs <project-path> [--agent <agent-id>]
 | E004 | Invalid configuration | Check config syntax |
 | E005 | Agent crash | Check logs for details |
 | E006 | Permission denied | Check file permissions |
-| E007 | Port already in use | Change port in config |
+| E007 | Port already in use | Change port or stop conflicting service |
 | E008 | Database connection failed | Check database settings |
+| E009 | Web UI already running | Use `web status` to check, `web stop` to stop |
+| E010 | Web UI not running | Start with `web start` |
+| E011 | PID file stale | Remove `.runtime/*.pid` files |
+| E012 | Dependencies not installed | Run npm install in web-ui directories |
 
 ## Rate Limits
 
@@ -325,6 +423,35 @@ agent-framework logs <project-path> [--agent <agent-id>]
 - Status updates: 10/second per agent
 - API requests: 1000/minute per project
 - WebSocket connections: 100 concurrent per project
+- Log streaming: 1000 lines/second
+- File watching: 100 files per project
+
+## Process Management
+
+### PID File Locations
+```
+/home/rob/agent-framework/.runtime/
+├── web-server.pid    # Backend Express server
+├── web-client.pid    # Frontend Vite dev server
+└── *.pid            # Other agent processes
+```
+
+### Log File Locations
+```
+/home/rob/agent-framework/logs/
+├── web-server.log    # Backend logs
+├── web-client.log    # Frontend logs
+├── combined.log      # All services
+└── error.log         # Error messages only
+```
+
+### Port Configuration
+```bash
+# Use custom ports
+export WEB_CLIENT_PORT=8080
+export WEB_SERVER_PORT=8081
+agent-framework web start
+```
 
 ## Authentication
 
