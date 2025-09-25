@@ -115,7 +115,8 @@ Please provide a structured task list with the following for each task:
 Format the response as a JSON array of task objects.`;
     
     try {
-      const response = await this.askClaude(prompt);
+      // Use longer timeout for initial project analysis (10 minutes)
+      const response = await this.askClaude(prompt, '', { timeout: 600000 });
       
       // Try to parse the response as JSON
       let tasks = [];
@@ -224,6 +225,19 @@ Format the response as a JSON array of task objects.`;
     
     for (const task of availableTasks) {
       const agent = task.assignedAgent;
+      
+      // Validate agent exists
+      if (!agent) {
+        await this.logError(`Task ${task.id} has no assigned agent, skipping`);
+        continue;
+      }
+      
+      // Check if agent is recognized
+      if (!this.agentStatus[agent]) {
+        await this.logError(`Task ${task.id} assigned to unknown agent '${agent}', skipping`);
+        continue;
+      }
+      
       const agentStatus = this.agentStatus[agent].status;
       
       // Check if agent is available (not busy)
@@ -490,7 +504,8 @@ If there are concrete implementation tasks that should follow this plan, provide
 Only generate tasks that are directly actionable. Return empty array if no follow-up needed.`;
 
       try {
-        const response = await this.askClaude(prompt);
+        // Use longer timeout for analysis (8 minutes)
+        const response = await this.askClaude(prompt, '', { timeout: 480000 });
         const jsonMatch = response.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           const newTasks = JSON.parse(jsonMatch[0]);

@@ -208,7 +208,7 @@ class BaseAgent extends EventEmitter {
   /**
    * Ask Claude - wrapper for Claude CLI integration
    */
-  async askClaude(prompt, context = '') {
+  async askClaude(prompt, context = '', options = {}) {
     try {
       // Emit thought event for Claude query
       this.emit('thought', {
@@ -273,6 +273,7 @@ ${instructionsSummary}
       const response = await this.claude.ask(prompt, {
         projectContext: projectContext,
         outputFormat: 'text',
+        timeout: options.timeout, // Pass timeout if provided
         onStreamChunk: (chunk) => {
           // Emit streaming stdout/stderr chunks from Claude
           this.emit('thought', {
