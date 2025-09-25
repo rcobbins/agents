@@ -258,6 +258,8 @@ const GlobalAssistant: React.FC = () => {
         <Box
           sx={{
             p: { xs: 1, sm: 1.5 },
+            minHeight: 56,
+            flexShrink: 0,
             background: 'linear-gradient(135deg, rgba(25,25,25,0.95) 0%, rgba(40,40,40,0.95) 100%)',
             backdropFilter: 'blur(10px)',
             borderBottom: expanded ? '1px solid rgba(255,255,255,0.1)' : 'none',
@@ -359,8 +361,8 @@ const GlobalAssistant: React.FC = () => {
           </MenuItem>
         </Menu>
 
-        <Collapse in={expanded}>
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <Collapse in={expanded} sx={{ flex: 1, overflow: 'hidden' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             {/* Context Info Bar - Simplified and subtle */}
             {(pageContext.projectId || (pageContext.errors && pageContext.errors.length > 0) || (pageContext.warnings && pageContext.warnings.length > 0)) && (
               <Box sx={{ 

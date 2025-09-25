@@ -105,8 +105,8 @@ class ClaudeAssistant {
       const escapedSystemPrompt = this.escapeShellArg(systemPrompt);
       const escapedMessage = this.escapeShellArg(message);
       
-      // Get configured model for assistant
-      let modelToUse = 'haiku-3-5'; // Default
+      // Get configured model for assistant  
+      let modelToUse = null; // Don't specify model by default
       try {
         const configPath = path.join(process.env.HOME, '.agent-framework/config/model-configuration.json');
         const configData = await fs.readFile(configPath, 'utf8');
@@ -115,12 +115,16 @@ class ClaudeAssistant {
           modelToUse = config.assistant.model;
         }
       } catch (error) {
-        // Use default if config not found
+        // Don't specify model if config not found
+        modelToUse = null;
       }
       
       // Build command with session management and model specification
       const claudePath = path.join(process.env.HOME || '/home/rob', 'bin', 'claude');
-      let command = `${claudePath} --print --model ${modelToUse}`;
+      let command = `${claudePath} --print`;
+      if (modelToUse) {
+        command += ` --model ${modelToUse}`;
+      }
       
       if (session.type === 'new') {
         command += ` --session-id ${session.uuid}`;
@@ -131,6 +135,7 @@ class ClaudeAssistant {
       command += ` --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
       
       this.logger.info(`Sending to Claude CLI (${session.type} session ${session.uuid})`);
+      this.logger.info(`Command: ${command.substring(0, 200)}...`);
       
       let result;
       let attempts = 0;
@@ -153,14 +158,14 @@ class ClaudeAssistant {
             // Session already exists, retry with --resume
             if (session.type === 'new') {
               await this.markSessionCreated(session.uuid);
-              command = `${claudePath} --print --model ${modelToUse} --resume ${session.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
+              command = `${claudePath} --print${modelToUse ? ` --model ${modelToUse}` : ''} --resume ${session.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
               this.logger.info('Session exists, retrying with --resume');
               continue;
             }
           } else if (stderr && stderr.includes('session') && stderr.includes('not found')) {
             // Session not found, reset and try again
             const newSession = await this.resetSession();
-            command = `${claudePath} --print --model ${modelToUse} --session-id ${newSession.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
+            command = `${claudePath} --print${modelToUse ? ` --model ${modelToUse}` : ''} --session-id ${newSession.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
             this.logger.info('Session not found, created new session');
             continue;
           }
@@ -178,6 +183,7 @@ class ClaudeAssistant {
           break;
           
         } catch (execError) {
+          this.logger.error(`Claude CLI execution error on attempt ${attempts}:`, execError.message);
           if (attempts >= maxAttempts) {
             throw execError;
           }
