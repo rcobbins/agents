@@ -499,7 +499,7 @@ show_summary() {
         echo "Next steps:"
         echo "1. Review the errors above"
         echo "2. Run the initialization wizard if needed:"
-        echo "   /home/rob/agent-framework/init/wizard.sh"
+        echo "   $HOME/agent-framework/init/wizard.sh"
         echo "3. Fix missing or incorrect configurations"
         echo "4. Run validation again"
         exit 1

@@ -32,7 +32,8 @@ exec('echo test3', (error, stdout, stderr) => {
 });
 
 // Test 4: Direct bash script
-const scriptPath = '/home/rob/agent-framework/agents/templates/coordinator.sh';
+const path = require('path');
+const scriptPath = path.join(process.env.HOME || '/home/rob', 'agent-framework/agents/templates/coordinator.sh');
 exec(`/bin/bash -c "echo Starting agent && exit 0"`, (error, stdout, stderr) => {
   if (error) {
     console.log('Test 4 error:', error);

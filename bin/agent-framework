@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Determine framework directory
 # If we're in ~/.local/bin, use the actual framework location
 if [[ "$SCRIPT_DIR" == "$HOME/.local/bin" ]]; then
-    FRAMEWORK_DIR="/home/rob/agent-framework"
+    FRAMEWORK_DIR="$HOME/agent-framework"
 else
     FRAMEWORK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi

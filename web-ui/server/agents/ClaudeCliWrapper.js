@@ -13,8 +13,8 @@ const execFilePromise = promisify(execFile);
 class ClaudeCliWrapper {
   constructor(agentName) {
     this.agentName = agentName;
-    this.claudePath = '/home/rob/bin/claude';
-    this.persistenceBase = path.join(process.env.HOME, '.agent-framework/persistence');
+    this.claudePath = path.join(process.env.HOME || '/home/rob', 'bin', 'claude');
+    this.persistenceBase = path.join(process.env.HOME || '/home/rob', '.agent-framework/persistence');
     this.sessionFile = path.join(this.persistenceBase, agentName, 'session.state');
     this.systemPrompts = this.getSystemPrompts();
   }

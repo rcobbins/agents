@@ -5,7 +5,7 @@ AGENT_NAME="planner"
 AGENT_ROLE="Task Analyst and Implementation Planner"
 
 # Source base agent
-FRAMEWORK_DIR="${FRAMEWORK_DIR:-/home/rob/agent-framework}"
+FRAMEWORK_DIR="${FRAMEWORK_DIR:-$HOME/agent-framework}"
 source "$FRAMEWORK_DIR/agents/templates/base-agent.sh"
 
 # Planner-specific configuration

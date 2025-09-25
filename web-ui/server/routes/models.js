@@ -64,7 +64,7 @@ async function saveModelConfiguration(config) {
 // Check if a specific model is available
 async function checkModelAvailable(model) {
   try {
-    const claudePath = '/home/rob/bin/claude';
+    const claudePath = path.join(process.env.HOME || '/home/rob', 'bin', 'claude');
     
     // Try to run a simple test with the model
     // Use a simple echo command that should work with any model
@@ -73,7 +73,7 @@ async function checkModelAvailable(model) {
       ['-c', `echo 'test' | ${claudePath} --print --model ${model}`],
       {
         timeout: 10000, // Increased timeout for slower models like Opus
-        env: { ...process.env, PATH: `/home/rob/bin:${process.env.PATH}` }
+        env: { ...process.env, PATH: `${path.join(process.env.HOME || '/home/rob', 'bin')}:${process.env.PATH}` }
       }
     );
     
@@ -91,7 +91,7 @@ async function checkModelAvailable(model) {
           ['-c', `echo 'test' | ${claudePath} --print --model sonnet`],
           {
             timeout: 10000,
-            env: { ...process.env, PATH: `/home/rob/bin:${process.env.PATH}` }
+            env: { ...process.env, PATH: `${path.join(process.env.HOME || '/home/rob', 'bin')}:${process.env.PATH}` }
           }
         );
         return stdout.length > 0;

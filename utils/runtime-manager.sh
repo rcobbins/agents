@@ -6,8 +6,8 @@
 set -e
 
 # Runtime directory
-RUNTIME_DIR="/home/rob/agent-framework/.runtime"
-FRAMEWORK_DIR="/home/rob/agent-framework"
+RUNTIME_DIR="$HOME/agent-framework/.runtime"
+FRAMEWORK_DIR="$HOME/agent-framework"
 
 # Colors
 RED='\033[0;31m'

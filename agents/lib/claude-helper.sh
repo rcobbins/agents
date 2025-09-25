@@ -4,7 +4,7 @@
 # Provides enhanced Claude integration with system prompts and session persistence
 
 # Load session manager if available
-FRAMEWORK_DIR="${FRAMEWORK_DIR:-/home/rob/agent-framework}"
+FRAMEWORK_DIR="${FRAMEWORK_DIR:-$HOME/agent-framework}"
 if [ -f "$FRAMEWORK_DIR/agents/lib/session-manager.sh" ]; then
     source "$FRAMEWORK_DIR/agents/lib/session-manager.sh"
 fi

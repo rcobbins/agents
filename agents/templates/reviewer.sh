@@ -5,7 +5,7 @@ AGENT_NAME="reviewer"
 AGENT_ROLE="Code Quality and Standards Reviewer"
 
 # Source base agent
-FRAMEWORK_DIR="${FRAMEWORK_DIR:-/home/rob/agent-framework}"
+FRAMEWORK_DIR="${FRAMEWORK_DIR:-$HOME/agent-framework}"
 source "$FRAMEWORK_DIR/agents/templates/base-agent.sh"
 
 # Reviewer-specific configuration
