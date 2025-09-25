@@ -30,6 +30,8 @@ import {
   BugReport as TestIcon,
   Analytics as AnalyticsIcon,
   ExpandMore as ExpandMoreIcon,
+  PlayCircleOutline as StartAllIcon,
+  StopCircle as StopAllIcon,
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { socketService } from '../services/socket';
@@ -173,6 +175,29 @@ function AgentMonitor() {
     }
   };
 
+  const handleLaunchAll = async () => {
+    try {
+      toast.loading('Launching all agents with intelligent sequencing...', { id: 'launch-all' });
+      await api.post(`/projects/${projectId}/agents/launch-all`);
+      toast.success('All agents launched successfully', { id: 'launch-all' });
+      // Refresh agent status after a delay to show they're running
+      setTimeout(() => loadAgents(), 3000);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to launch all agents', { id: 'launch-all' });
+    }
+  };
+
+  const handleStopAll = async () => {
+    try {
+      toast.loading('Stopping all agents gracefully...', { id: 'stop-all' });
+      await api.post(`/projects/${projectId}/agents/stop-all`);
+      toast.success('All agents stopped successfully', { id: 'stop-all' });
+      loadAgents();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to stop all agents', { id: 'stop-all' });
+    }
+  };
+
   const getStatusColor = (status?: string) => {
     switch (status) {
       case 'running':
@@ -196,12 +221,44 @@ function AgentMonitor() {
     return `${hours}h ${minutes}m ${secs}s`;
   };
 
+  // Check if any agents are running
+  const anyAgentRunning = Object.values(agents).some(agent => agent?.status === 'running');
+  const allAgentsRunning = AGENT_TYPES.every(type => agents[type]?.status === 'running');
+
   return (
     <Box>
       <Box sx={{ mb: 3 }}>
-        <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
-          Agent Monitor
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+          <Typography variant={isMobile ? "h5" : "h4"} className="text-responsive-xl">
+            Agent Monitor
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {!allAgentsRunning && (
+              <Button
+                variant="contained"
+                color="success"
+                startIcon={<StartAllIcon />}
+                onClick={handleLaunchAll}
+                disabled={allAgentsRunning}
+                size={isMobile ? 'small' : 'medium'}
+              >
+                {isMobile ? 'Start All' : 'Start All Agents'}
+              </Button>
+            )}
+            {anyAgentRunning && (
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<StopAllIcon />}
+                onClick={handleStopAll}
+                disabled={!anyAgentRunning}
+                size={isMobile ? 'small' : 'medium'}
+              >
+                {isMobile ? 'Stop All' : 'Stop All Agents'}
+              </Button>
+            )}
+          </Box>
+        </Box>
         <Stack 
           direction={isMobile ? 'column' : 'row'}
           spacing={1}
@@ -288,14 +345,15 @@ function AgentMonitor() {
                   onChange={(_, expanded) => setExpandedAgent(expanded ? agentType : false)}
                 >
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
-                      <Typography variant="h6">
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between', pr: 1 }}>
+                      <Typography variant="h6" className="text-responsive-md">
                         {agentType.charAt(0).toUpperCase() + agentType.slice(1)}
                       </Typography>
                       <Chip
                         label={agent?.status || 'not running'}
                         color={getStatusColor(agent?.status) as any}
                         size="small"
+                        className="text-responsive-xs"
                       />
                     </Box>
                   </AccordionSummary>
@@ -305,18 +363,18 @@ function AgentMonitor() {
                         <CardContent>
                           <Box display="flex" alignItems="center" gap={1} mb={2}>
                             {isRunning && agent.pid && (
-                              <Typography variant="caption" color="text.secondary">
+                              <Typography variant="caption" color="text.secondary" className="text-responsive-sm">
                                 PID: {agent.pid}
                               </Typography>
                             )}
                           </Box>
                           {isRunning && (
                             <Box>
-                              <Typography variant="body2" color="text.secondary">
+                              <Typography variant="body2" color="text.secondary" className="text-responsive-sm">
                                 Uptime: {formatUptime(agent.uptime)}
                               </Typography>
                               {agent.startTime && (
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography variant="body2" color="text.secondary" className="text-responsive-sm">
                                   Started: {new Date(agent.startTime).toLocaleTimeString()}
                                 </Typography>
                               )}

@@ -3,6 +3,7 @@ import { createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Toaster } from 'react-hot-toast';
+import './styles/responsive.css';
 
 import { SocketProvider } from './contexts/SocketContext';
 import { AIAssistantProvider } from './contexts/AIAssistantContext';

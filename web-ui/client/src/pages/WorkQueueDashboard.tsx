@@ -420,13 +420,14 @@ function WorkQueueDashboard() {
                   >
                     <CardContent sx={{ pb: 1 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <Typography variant="subtitle2" gutterBottom>
+                        <Typography variant="subtitle2" gutterBottom className="text-responsive-sm text-ellipsis">
                           {task.title}
                         </Typography>
                         <Chip
                           label={task.priority}
                           size="small"
                           color={getPriorityColor(task.priority) as any}
+                          className="text-responsive-xs"
                         />
                       </Box>
                       
@@ -434,13 +435,7 @@ function WorkQueueDashboard() {
                         <Typography
                           variant="body2"
                           color="text.secondary"
-                          sx={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                          }}
+                          className="text-responsive-xs line-clamp-2"
                         >
                           {task.description}
                         </Typography>
@@ -549,13 +544,14 @@ function WorkQueueDashboard() {
                 >
                   <CardContent sx={{ pb: 1 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <Typography variant="subtitle2" gutterBottom>
+                      <Typography variant="subtitle2" gutterBottom className="text-responsive-sm text-ellipsis">
                         {task.title}
                       </Typography>
                       <Chip
                         label={task.priority}
                         size="small"
                         color={getPriorityColor(task.priority) as any}
+                        className="text-responsive-xs"
                       />
                     </Box>
                     
@@ -563,13 +559,7 @@ function WorkQueueDashboard() {
                       <Typography
                         variant="body2"
                         color="text.secondary"
-                        sx={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                        }}
+                        className="text-responsive-xs line-clamp-2"
                       >
                         {task.description}
                       </Typography>

@@ -134,6 +134,76 @@ Provide constructive feedback that improves code quality.`
   }
   
   /**
+   * Get the appropriate model for each agent
+   */
+  async getModelForAgent() {
+    // Try to load saved model configuration first
+    try {
+      const configPath = path.join(process.env.HOME, '.agent-framework/config/model-configuration.json');
+      if (await this.fileExists(configPath)) {
+        const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+        if (config[this.agentName] && config[this.agentName].model) {
+          const preferredModel = config[this.agentName].model;
+          
+          // Special handling for coordinator to try sonnet[1m] first
+          if (this.agentName === 'coordinator' && preferredModel === 'sonnet') {
+            const isAvailable = await this.testModel('sonnet[1m]');
+            if (isAvailable) {
+              return 'sonnet[1m]';
+            }
+          }
+          
+          return preferredModel;
+        }
+      }
+    } catch (error) {
+      await this.log(`Could not load model configuration: ${error.message}`);
+    }
+    
+    // Fallback to default models if config not found
+    const defaultModels = {
+      coordinator: 'sonnet', // Try sonnet[1m] first via detectAvailableModel if needed
+      planner: 'sonnet',
+      coder: 'sonnet',
+      tester: 'sonnet',
+      reviewer: 'sonnet'
+    };
+    
+    const agentModel = defaultModels[this.agentName] || 'sonnet';
+    
+    // Special handling for coordinator to try sonnet[1m] first
+    if (this.agentName === 'coordinator') {
+      const isAvailable = await this.testModel('sonnet[1m]');
+      if (isAvailable) {
+        return 'sonnet[1m]';
+      }
+    }
+    
+    return agentModel;
+  }
+  
+  /**
+   * Test if a specific model is available
+   */
+  async testModel(model) {
+    try {
+      // Try a simple test with the model
+      const { stdout } = await execFilePromise(
+        this.claudePath,
+        ['--print', '--model', model, 'echo test'],
+        {
+          timeout: 5000,
+          env: { ...process.env, PATH: `/home/rob/bin:${process.env.PATH}` }
+        }
+      );
+      return stdout.includes('test');
+    } catch (error) {
+      await this.log(`Model ${model} not available: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
    * Ask Claude with proper session management and system prompts
    */
   async ask(userPrompt, options = {}) {
@@ -160,8 +230,11 @@ Provide constructive feedback that improves code quality.`
         await this.log(`Large prompt detected: ${fullPrompt.length} chars, using stdin piping with ${timeout/1000}s timeout`);
       }
       
+      // Get the appropriate model for this agent
+      const model = await this.getModelForAgent();
+      
       // Build command arguments
-      const args = ['--print'];
+      const args = ['--print', '--model', model];
       
       // Add session management
       if (session.type === 'resume') {

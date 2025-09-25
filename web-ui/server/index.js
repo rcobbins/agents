@@ -32,6 +32,7 @@ const flowsRoutes = require('./routes/flows');
 const changesRoutes = require('./routes/changes');
 const testsRoutes = require('./routes/tests');
 const analyticsRoutes = require('./routes/analytics');
+const modelsRoutes = require('./routes/models');
 
 // Initialize express app
 const app = express();
@@ -304,6 +305,7 @@ app.use('/api/flows', flowsRoutes);
 app.use('/api/changes', changesRoutes);
 app.use('/api/tests', testsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/models', modelsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

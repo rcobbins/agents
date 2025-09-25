@@ -105,8 +105,21 @@ class ClaudeAssistant {
       const escapedSystemPrompt = this.escapeShellArg(systemPrompt);
       const escapedMessage = this.escapeShellArg(message);
       
-      // Build command with session management
-      let command = 'claude --print';
+      // Get configured model for assistant
+      let modelToUse = 'haiku-3-5'; // Default
+      try {
+        const configPath = path.join(process.env.HOME, '.agent-framework/config/model-configuration.json');
+        const configData = await fs.readFile(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        if (config.assistant && config.assistant.model) {
+          modelToUse = config.assistant.model;
+        }
+      } catch (error) {
+        // Use default if config not found
+      }
+      
+      // Build command with session management and model specification
+      let command = `claude --print --model ${modelToUse}`;
       
       if (session.type === 'new') {
         command += ` --session-id ${session.uuid}`;
@@ -135,14 +148,14 @@ class ClaudeAssistant {
             // Session already exists, retry with --resume
             if (session.type === 'new') {
               await this.markSessionCreated(session.uuid);
-              command = `claude --print --resume ${session.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
+              command = `claude --print --model haiku-3-5 --resume ${session.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
               this.logger.info('Session exists, retrying with --resume');
               continue;
             }
           } else if (stderr && stderr.includes('session') && stderr.includes('not found')) {
             // Session not found, reset and try again
             const newSession = await this.resetSession();
-            command = `claude --print --session-id ${newSession.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
+            command = `claude --print --model haiku-3-5 --session-id ${newSession.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
             this.logger.info('Session not found, created new session');
             continue;
           }

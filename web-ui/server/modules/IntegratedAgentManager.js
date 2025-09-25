@@ -391,6 +391,272 @@ class IntegratedAgentManager extends EventEmitter {
   }
   
   /**
+   * Launch all agents for a project with intelligent sequencing
+   * Using "ultrathink" methodology to determine optimal launch order
+   */
+  async launchAllAgents(projectId, config = {}) {
+    this.logger.info(`Starting orchestrated launch of all agents for project ${projectId}`);
+    
+    const launchStatus = {
+      phases: [],
+      errors: [],
+      startTime: new Date().toISOString(),
+      projectId
+    };
+    
+    try {
+      // Phase 1: Core Infrastructure - Launch Coordinator first
+      this.logger.info('Phase 1: Launching Coordinator agent (core orchestration)');
+      launchStatus.phases.push({ 
+        phase: 1, 
+        name: 'Core Infrastructure',
+        agents: ['coordinator'],
+        status: 'starting',
+        startTime: new Date().toISOString()
+      });
+      
+      this.emit('launchProgress', { projectId, phase: 1, message: 'Starting Coordinator agent...' });
+      
+      await this.launchAgent(projectId, 'coordinator', config);
+      await this.waitForAgentReady(projectId, 'coordinator', 10000); // Wait up to 10 seconds
+      
+      launchStatus.phases[0].status = 'completed';
+      launchStatus.phases[0].endTime = new Date().toISOString();
+      
+      // Wait 2-3 seconds for Coordinator to fully initialize
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      
+      // Phase 2: Planning Layer - Launch Planner and Reviewer in parallel
+      this.logger.info('Phase 2: Launching Planning Layer agents');
+      launchStatus.phases.push({
+        phase: 2,
+        name: 'Planning Layer',
+        agents: ['planner', 'reviewer'],
+        status: 'starting',
+        startTime: new Date().toISOString()
+      });
+      
+      this.emit('launchProgress', { projectId, phase: 2, message: 'Starting Planner and Reviewer agents...' });
+      
+      const phase2Promises = [
+        this.launchAgent(projectId, 'planner', config),
+        this.launchAgent(projectId, 'reviewer', config)
+      ];
+      
+      await Promise.all(phase2Promises);
+      
+      // Wait for both agents to be ready
+      await Promise.all([
+        this.waitForAgentReady(projectId, 'planner', 10000),
+        this.waitForAgentReady(projectId, 'reviewer', 10000)
+      ]);
+      
+      launchStatus.phases[1].status = 'completed';
+      launchStatus.phases[1].endTime = new Date().toISOString();
+      
+      // Wait 2 seconds before execution layer
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Phase 3: Execution Layer - Launch Coder and Tester in parallel
+      this.logger.info('Phase 3: Launching Execution Layer agents');
+      launchStatus.phases.push({
+        phase: 3,
+        name: 'Execution Layer',
+        agents: ['coder', 'tester'],
+        status: 'starting',
+        startTime: new Date().toISOString()
+      });
+      
+      this.emit('launchProgress', { projectId, phase: 3, message: 'Starting Coder and Tester agents...' });
+      
+      const phase3Promises = [
+        this.launchAgent(projectId, 'coder', config),
+        this.launchAgent(projectId, 'tester', config)
+      ];
+      
+      await Promise.all(phase3Promises);
+      
+      // Wait for both agents to be ready
+      await Promise.all([
+        this.waitForAgentReady(projectId, 'coder', 10000),
+        this.waitForAgentReady(projectId, 'tester', 10000)
+      ]);
+      
+      launchStatus.phases[2].status = 'completed';
+      launchStatus.phases[2].endTime = new Date().toISOString();
+      
+      // Final verification - ensure all agents are running
+      const allAgents = ['coordinator', 'planner', 'reviewer', 'coder', 'tester'];
+      const finalStatus = {};
+      
+      for (const agentType of allAgents) {
+        const status = this.getAgentStatus(projectId, agentType);
+        finalStatus[agentType] = status ? status.status : 'not_found';
+      }
+      
+      launchStatus.endTime = new Date().toISOString();
+      launchStatus.success = true;
+      launchStatus.finalStatus = finalStatus;
+      
+      this.logger.info('All agents launched successfully with proper sequencing');
+      this.emit('allAgentsLaunched', { projectId, launchStatus });
+      
+      return launchStatus;
+      
+    } catch (error) {
+      this.logger.error('Failed to launch all agents:', error);
+      launchStatus.errors.push({
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+      launchStatus.success = false;
+      
+      // Try to clean up any agents that were started
+      await this.stopAllAgents(projectId, { force: true });
+      
+      throw error;
+    }
+  }
+  
+  /**
+   * Stop all agents for a project in reverse order
+   */
+  async stopAllAgents(projectId, options = {}) {
+    this.logger.info(`Starting graceful shutdown of all agents for project ${projectId}`);
+    
+    const stopStatus = {
+      phases: [],
+      errors: [],
+      startTime: new Date().toISOString(),
+      projectId
+    };
+    
+    try {
+      // Stop in reverse order: Execution Layer first
+      this.logger.info('Phase 1: Stopping Execution Layer agents');
+      stopStatus.phases.push({
+        phase: 1,
+        name: 'Execution Layer Shutdown',
+        agents: ['coder', 'tester'],
+        status: 'stopping',
+        startTime: new Date().toISOString()
+      });
+      
+      this.emit('stopProgress', { projectId, phase: 1, message: 'Stopping Coder and Tester agents...' });
+      
+      const phase1Promises = [];
+      
+      if (this.getAgentStatus(projectId, 'coder')) {
+        phase1Promises.push(this.stopAgent(projectId, 'coder').catch(e => e));
+      }
+      if (this.getAgentStatus(projectId, 'tester')) {
+        phase1Promises.push(this.stopAgent(projectId, 'tester').catch(e => e));
+      }
+      
+      await Promise.allSettled(phase1Promises);
+      stopStatus.phases[0].status = 'completed';
+      stopStatus.phases[0].endTime = new Date().toISOString();
+      
+      // Wait before stopping planning layer
+      if (!options.force) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      // Phase 2: Stop Planning Layer
+      this.logger.info('Phase 2: Stopping Planning Layer agents');
+      stopStatus.phases.push({
+        phase: 2,
+        name: 'Planning Layer Shutdown',
+        agents: ['planner', 'reviewer'],
+        status: 'stopping',
+        startTime: new Date().toISOString()
+      });
+      
+      this.emit('stopProgress', { projectId, phase: 2, message: 'Stopping Planner and Reviewer agents...' });
+      
+      const phase2Promises = [];
+      
+      if (this.getAgentStatus(projectId, 'planner')) {
+        phase2Promises.push(this.stopAgent(projectId, 'planner').catch(e => e));
+      }
+      if (this.getAgentStatus(projectId, 'reviewer')) {
+        phase2Promises.push(this.stopAgent(projectId, 'reviewer').catch(e => e));
+      }
+      
+      await Promise.allSettled(phase2Promises);
+      stopStatus.phases[1].status = 'completed';
+      stopStatus.phases[1].endTime = new Date().toISOString();
+      
+      // Wait before stopping coordinator
+      if (!options.force) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      // Phase 3: Stop Core Infrastructure
+      this.logger.info('Phase 3: Stopping Core Infrastructure');
+      stopStatus.phases.push({
+        phase: 3,
+        name: 'Core Infrastructure Shutdown',
+        agents: ['coordinator'],
+        status: 'stopping',
+        startTime: new Date().toISOString()
+      });
+      
+      this.emit('stopProgress', { projectId, phase: 3, message: 'Stopping Coordinator agent...' });
+      
+      if (this.getAgentStatus(projectId, 'coordinator')) {
+        await this.stopAgent(projectId, 'coordinator').catch(e => e);
+      }
+      
+      stopStatus.phases[2].status = 'completed';
+      stopStatus.phases[2].endTime = new Date().toISOString();
+      
+      stopStatus.endTime = new Date().toISOString();
+      stopStatus.success = true;
+      
+      this.logger.info('All agents stopped successfully');
+      this.emit('allAgentsStopped', { projectId, stopStatus });
+      
+      return stopStatus;
+      
+    } catch (error) {
+      this.logger.error('Error during graceful shutdown:', error);
+      stopStatus.errors.push({
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+      stopStatus.success = false;
+      
+      throw error;
+    }
+  }
+  
+  /**
+   * Wait for an agent to be ready
+   */
+  async waitForAgentReady(projectId, agentType, timeout = 10000) {
+    const startTime = Date.now();
+    const agentKey = `${projectId}:${agentType}`;
+    
+    while (Date.now() - startTime < timeout) {
+      const agentInfo = this.agents.get(agentKey);
+      
+      if (agentInfo && agentInfo.status === 'running') {
+        this.logger.info(`Agent ${agentType} is ready`);
+        return true;
+      }
+      
+      if (agentInfo && agentInfo.status === 'error') {
+        throw new Error(`Agent ${agentType} failed to start: ${agentInfo.error}`);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    throw new Error(`Agent ${agentType} failed to become ready within ${timeout}ms`);
+  }
+  
+  /**
    * Get agent status
    */
   getAgentStatus(projectId, agentId) {

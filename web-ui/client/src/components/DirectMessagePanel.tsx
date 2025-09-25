@@ -173,32 +173,58 @@ const DirectMessagePanel: React.FC<DirectMessagePanelProps> = ({
         </Alert>
       )}
 
-      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel>Type</InputLabel>
+      <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+        <FormControl 
+          size="small" 
+          sx={{ 
+            minWidth: { xs: 100, sm: 120 },
+            maxWidth: { xs: 140, sm: 160 },
+            flex: '1 1 auto'
+          }}
+        >
+          <InputLabel sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Type</InputLabel>
           <Select
             value={messageType}
             onChange={(e) => setMessageType(e.target.value as DirectMessage['type'])}
             label="Type"
+            sx={{
+              '& .MuiSelect-select': {
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                py: { xs: 0.5, sm: 1 }
+              }
+            }}
           >
-            <MenuItem value="info">Info</MenuItem>
-            <MenuItem value="suggestion">Suggestion</MenuItem>
-            <MenuItem value="correction">Correction</MenuItem>
-            <MenuItem value="interrupt">Interrupt</MenuItem>
+            <MenuItem value="info" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Info</MenuItem>
+            <MenuItem value="suggestion" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Suggestion</MenuItem>
+            <MenuItem value="correction" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Correction</MenuItem>
+            <MenuItem value="interrupt" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Interrupt</MenuItem>
           </Select>
         </FormControl>
 
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel>Priority</InputLabel>
+        <FormControl 
+          size="small" 
+          sx={{ 
+            minWidth: { xs: 100, sm: 120 },
+            maxWidth: { xs: 140, sm: 160 },
+            flex: '1 1 auto'
+          }}
+        >
+          <InputLabel sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Priority</InputLabel>
           <Select
             value={priority}
             onChange={(e) => setPriority(e.target.value as DirectMessage['priority'])}
             label="Priority"
+            sx={{
+              '& .MuiSelect-select': {
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                py: { xs: 0.5, sm: 1 }
+              }
+            }}
           >
-            <MenuItem value="low">Low</MenuItem>
-            <MenuItem value="normal">Normal</MenuItem>
-            <MenuItem value="high">High</MenuItem>
-            <MenuItem value="critical">Critical</MenuItem>
+            <MenuItem value="low" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Low</MenuItem>
+            <MenuItem value="normal" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Normal</MenuItem>
+            <MenuItem value="high" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>High</MenuItem>
+            <MenuItem value="critical" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Critical</MenuItem>
           </Select>
         </FormControl>
       </Box>

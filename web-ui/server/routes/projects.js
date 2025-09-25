@@ -138,6 +138,40 @@ router.post('/:id/agents/:agentId/stop', async (req, res) => {
   }
 });
 
+// POST launch all agents with intelligent sequencing
+router.post('/:id/agents/launch-all', async (req, res) => {
+  try {
+    const project = req.app.locals.projectManager.getProject(req.params.id);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    const config = {
+      ...req.body,
+      projectPath: project.path
+    };
+    
+    const result = await req.app.locals.agentManager.launchAllAgents(
+      req.params.id,
+      config
+    );
+    
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// POST stop all agents gracefully
+router.post('/:id/agents/stop-all', async (req, res) => {
+  try {
+    const result = await req.app.locals.agentManager.stopAllAgents(req.params.id);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // GET agent status
 router.get('/:id/agents/:agentId', async (req, res) => {
   try {

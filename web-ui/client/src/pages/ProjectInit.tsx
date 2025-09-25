@@ -3,9 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
-  Stepper,
-  Step,
-  StepLabel,
   Button,
   Paper,
   Grid,
@@ -24,7 +21,6 @@ import {
   HelpOutline,
   AutoAwesome,
   Engineering,
-  CheckCircle,
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
@@ -42,6 +38,7 @@ import ComplexityEstimator from '../components/project-init/ComplexityEstimator'
 import ReviewWithValidation from '../components/project-init/ReviewWithValidation';
 import ProjectVisionWizard from '../components/project-init/ProjectVisionWizard';
 import RequirementsWizard from '../components/project-init/RequirementsWizard';
+import CustomStepper from '../components/project-init/CustomStepper';
 
 // Import types
 import { ProjectConfig } from '../types/project';
@@ -518,66 +515,44 @@ function ProjectInit() {
         <Box>
           {/* Main Content */}
           <Box sx={{ width: '100%' }}>
-            {/* Progress Indicator */}
-            <LinearProgress
-              variant="determinate"
-              value={(activeStep / (steps.length - 1)) * 100}
-              sx={{ mb: 3, height: 6, borderRadius: 1 }}
-            />
+            {/* Progress Indicator with Label */}
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  sx={{ fontSize: 'var(--font-sm)' }}
+                >
+                  {steps[activeStep]?.label || 'Step'}
+                </Typography>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  sx={{ fontSize: 'var(--font-sm)' }}
+                >
+                  {activeStep + 1} of {steps.length}
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={(activeStep / (steps.length - 1)) * 100}
+                sx={{ height: 6, borderRadius: 1 }}
+              />
+            </Box>
 
-            {/* Stepper */}
+            {/* Custom Stepper */}
             {mode === 'guided' && (
               <Paper elevation={1} sx={{ 
-                p: 2, 
-                mb: 3,
-                overflowX: 'auto',
-                '&::-webkit-scrollbar': { height: 8 },
-                '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.400', borderRadius: 1 }
+                mb: { xs: 2, sm: 3 },
+                bgcolor: 'background.paper',
+                overflow: 'visible'
               }}>
-                <Stepper 
-                  activeStep={activeStep} 
-                  alternativeLabel
-                  sx={{ 
-                    minWidth: { xs: '600px', sm: 'auto' }
-                  }}
-                >
-                  {steps.map((step, index) => (
-                    <Step key={step.id} completed={isStepCompleted(step.id) && index < activeStep}>
-                      <StepLabel
-                        onClick={() => handleStepClick(index)}
-                        sx={{ 
-                          cursor: 'pointer',
-                          '& .MuiStepLabel-label': {
-                            fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                            display: { xs: 'none', sm: 'block' }
-                          }
-                        }}
-                        StepIconComponent={(props) => (
-                          <Tooltip title={step.label} arrow placement="top">
-                            <Box
-                              sx={{
-                                width: { xs: 28, sm: 32 },
-                                height: { xs: 28, sm: 32 },
-                                borderRadius: '50%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                bgcolor: props.active ? 'primary.main' : props.completed ? 'success.main' : 'grey.300',
-                                color: 'white',
-                                fontWeight: 'bold',
-                                fontSize: { xs: '0.75rem', sm: '1rem' }
-                              }}
-                            >
-                              {props.completed ? <CheckCircle fontSize="small" /> : index + 1}
-                            </Box>
-                          </Tooltip>
-                        )}
-                      >
-                        {step.label}
-                      </StepLabel>
-                    </Step>
-                  ))}
-                </Stepper>
+                <CustomStepper
+                  steps={steps}
+                  activeStep={activeStep}
+                  isStepCompleted={isStepCompleted}
+                  onStepClick={handleStepClick}
+                />
               </Paper>
             )}
 

@@ -12,6 +12,7 @@ import {
   Divider,
 } from '@mui/material';
 import toast from 'react-hot-toast';
+import ModelConfiguration from '../components/ModelConfiguration';
 
 function Settings() {
   const [settings, setSettings] = useState({
@@ -154,6 +155,10 @@ function Settings() {
               />
             </CardContent>
           </Card>
+        </Grid>
+
+        <Grid item xs={12}>
+          <ModelConfiguration />
         </Grid>
 
         <Grid item xs={12}>

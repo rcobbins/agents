@@ -1,0 +1,271 @@
+/* Responsive Typography System */
+:root {
+  /* Font size variables with clamp for responsive scaling */
+  --font-xs: clamp(0.65rem, 1vw + 0.5rem, 0.75rem);
+  --font-sm: clamp(0.75rem, 1.2vw + 0.6rem, 0.875rem);
+  --font-md: clamp(0.875rem, 1.5vw + 0.7rem, 1rem);
+  --font-lg: clamp(1rem, 2vw + 0.75rem, 1.25rem);
+  --font-xl: clamp(1.125rem, 2.5vw + 0.875rem, 1.5rem);
+  --font-2xl: clamp(1.25rem, 3vw + 1rem, 1.875rem);
+  --font-3xl: clamp(1.5rem, 4vw + 1rem, 2.25rem);
+  
+  /* Spacing that scales with viewport */
+  --space-xs: clamp(0.25rem, 0.5vw, 0.375rem);
+  --space-sm: clamp(0.5rem, 1vw, 0.75rem);
+  --space-md: clamp(0.75rem, 1.5vw, 1rem);
+  --space-lg: clamp(1rem, 2vw, 1.5rem);
+  --space-xl: clamp(1.5rem, 3vw, 2rem);
+}
+
+/* Responsive text utilities */
+.text-responsive-xs { 
+  font-size: var(--font-xs) !important;
+  line-height: 1.5;
+}
+
+.text-responsive-sm { 
+  font-size: var(--font-sm) !important;
+  line-height: 1.5;
+}
+
+.text-responsive-md { 
+  font-size: var(--font-md) !important;
+  line-height: 1.5;
+}
+
+.text-responsive-lg { 
+  font-size: var(--font-lg) !important;
+  line-height: 1.4;
+}
+
+.text-responsive-xl { 
+  font-size: var(--font-xl) !important;
+  line-height: 1.3;
+}
+
+.text-responsive-2xl { 
+  font-size: var(--font-2xl) !important;
+  line-height: 1.2;
+}
+
+.text-responsive-3xl { 
+  font-size: var(--font-3xl) !important;
+  line-height: 1.1;
+}
+
+/* Text overflow utilities */
+.text-ellipsis { 
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.text-ellipsis-2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+}
+
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.line-clamp-4 {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+/* Word break utilities */
+.break-word {
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.break-all {
+  word-break: break-all;
+}
+
+/* Prevent text overflow */
+.text-no-overflow {
+  overflow: hidden;
+  max-width: 100%;
+}
+
+/* Responsive spacing utilities */
+.p-responsive-sm { padding: var(--space-sm) !important; }
+.p-responsive-md { padding: var(--space-md) !important; }
+.p-responsive-lg { padding: var(--space-lg) !important; }
+
+.px-responsive-sm { 
+  padding-left: var(--space-sm) !important; 
+  padding-right: var(--space-sm) !important;
+}
+.px-responsive-md { 
+  padding-left: var(--space-md) !important; 
+  padding-right: var(--space-md) !important;
+}
+.py-responsive-sm { 
+  padding-top: var(--space-sm) !important; 
+  padding-bottom: var(--space-sm) !important;
+}
+.py-responsive-md { 
+  padding-top: var(--space-md) !important; 
+  padding-bottom: var(--space-md) !important;
+}
+
+/* Container queries for better component responsiveness */
+@container (max-width: 400px) {
+  .container-text-sm {
+    font-size: var(--font-xs) !important;
+  }
+  .container-hide-sm {
+    display: none !important;
+  }
+}
+
+/* Touch target sizing for mobile */
+@media (max-width: 768px) {
+  button, .MuiButton-root, .MuiIconButton-root {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  .MuiChip-root {
+    min-height: 32px;
+  }
+}
+
+/* Responsive grid utilities */
+.grid-responsive {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+@media (max-width: 600px) {
+  .grid-responsive {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* MUI overrides for better responsive behavior */
+.MuiTypography-h1 {
+  font-size: var(--font-3xl) !important;
+}
+
+.MuiTypography-h2 {
+  font-size: var(--font-2xl) !important;
+}
+
+.MuiTypography-h3 {
+  font-size: var(--font-xl) !important;
+}
+
+.MuiTypography-h4 {
+  font-size: var(--font-lg) !important;
+}
+
+.MuiTypography-h5 {
+  font-size: var(--font-md) !important;
+}
+
+.MuiTypography-h6 {
+  font-size: var(--font-md) !important;
+}
+
+.MuiTypography-body1 {
+  font-size: var(--font-md) !important;
+}
+
+.MuiTypography-body2 {
+  font-size: var(--font-sm) !important;
+}
+
+.MuiTypography-caption {
+  font-size: var(--font-xs) !important;
+}
+
+/* Stepper responsive fixes */
+.MuiStepper-root {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.MuiStep-root {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .MuiStepLabel-label {
+    font-size: var(--font-xs) !important;
+  }
+  
+  .MuiStepIcon-root {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: var(--font-sm) !important;
+  }
+  
+  .MuiStepConnector-line {
+    min-width: 20px;
+  }
+}
+
+/* Card responsive improvements */
+@media (max-width: 600px) {
+  .MuiCard-root {
+    margin: var(--space-xs);
+  }
+  
+  .MuiCardContent-root {
+    padding: var(--space-sm) !important;
+  }
+  
+  .MuiCardActions-root {
+    padding: var(--space-xs) var(--space-sm) !important;
+  }
+}
+
+/* Ensure content doesn't overflow viewport */
+* {
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Horizontal scroll prevention */
+body {
+  overflow-x: hidden;
+}
+
+.MuiContainer-root {
+  overflow-x: hidden;
+}
