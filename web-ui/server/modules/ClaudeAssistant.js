@@ -119,7 +119,8 @@ class ClaudeAssistant {
       }
       
       // Build command with session management and model specification
-      let command = `claude --print --model ${modelToUse}`;
+      const claudePath = path.join(process.env.HOME || '/home/rob', 'bin', 'claude');
+      let command = `${claudePath} --print --model ${modelToUse}`;
       
       if (session.type === 'new') {
         command += ` --session-id ${session.uuid}`;
@@ -141,21 +142,25 @@ class ClaudeAssistant {
         try {
           const { stdout, stderr } = await execAsync(command, {
             maxBuffer: 1024 * 1024 * 10, // 10MB buffer
-            timeout: 30000 // 30 second timeout
+            timeout: 30000, // 30 second timeout
+            env: {
+              ...process.env,
+              PATH: `${path.join(process.env.HOME || '/home/rob', 'bin')}:${process.env.PATH}`
+            }
           });
           
           if (stderr && stderr.includes('session') && stderr.includes('exists')) {
             // Session already exists, retry with --resume
             if (session.type === 'new') {
               await this.markSessionCreated(session.uuid);
-              command = `claude --print --model haiku-3-5 --resume ${session.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
+              command = `${claudePath} --print --model ${modelToUse} --resume ${session.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
               this.logger.info('Session exists, retrying with --resume');
               continue;
             }
           } else if (stderr && stderr.includes('session') && stderr.includes('not found')) {
             // Session not found, reset and try again
             const newSession = await this.resetSession();
-            command = `claude --print --model haiku-3-5 --session-id ${newSession.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
+            command = `${claudePath} --print --model ${modelToUse} --session-id ${newSession.uuid} --append-system-prompt ${escapedSystemPrompt} ${escapedMessage}`;
             this.logger.info('Session not found, created new session');
             continue;
           }
@@ -307,7 +312,13 @@ class ClaudeAssistant {
    */
   async isAvailable() {
     try {
-      const { stdout } = await execAsync('which claude');
+      const claudePath = path.join(process.env.HOME || '/home/rob', 'bin', 'claude');
+      const { stdout } = await execAsync(`which ${claudePath}`, {
+        env: {
+          ...process.env,
+          PATH: `${path.join(process.env.HOME || '/home/rob', 'bin')}:${process.env.PATH}`
+        }
+      });
       return !!stdout.trim();
     } catch {
       return false;

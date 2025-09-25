@@ -418,7 +418,7 @@ class IntegratedAgentManager extends EventEmitter {
       this.emit('launchProgress', { projectId, phase: 1, message: 'Starting Coordinator agent...' });
       
       await this.launchAgent(projectId, 'coordinator', config);
-      await this.waitForAgentReady(projectId, 'coordinator', 60000); // Wait up to 60 seconds for coordinator initialization
+      await this.waitForAgentReady(projectId, 'coordinator', 600000); // Wait up to 10 minutes for coordinator initialization
       
       launchStatus.phases[0].status = 'completed';
       launchStatus.phases[0].endTime = new Date().toISOString();
