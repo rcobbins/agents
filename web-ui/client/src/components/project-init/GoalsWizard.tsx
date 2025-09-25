@@ -34,10 +34,12 @@ import {
 
 interface Goal {
   id: string;
-  text: string;
+  description: string;
   priority: 'high' | 'medium' | 'low';
   category: 'performance' | 'security' | 'scalability' | 'cost' | 'timeline' | 'custom';
   metrics?: string[];
+  status?: 'pending' | 'in-progress' | 'completed';
+  acceptanceCriteria?: string[];
 }
 
 interface GoalsWizardProps {
@@ -95,35 +97,37 @@ const GoalsWizard: React.FC<GoalsWizardProps> = ({
   projectType,
   showSuggestions = true,
 }) => {
-  const [newGoalText, setNewGoalText] = useState('');
+  const [newGoalDescription, setNewGoalDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Goal['category']>('custom');
   const [selectedPriority, setSelectedPriority] = useState<Goal['priority']>('medium');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handleAddGoal = () => {
-    if (!newGoalText.trim()) return;
+    if (!newGoalDescription.trim()) return;
 
     const newGoal: Goal = {
       id: `goal-${Date.now()}`,
-      text: newGoalText,
+      description: newGoalDescription,
+      status: 'pending',
       priority: selectedPriority,
       category: selectedCategory,
     };
 
     onChange([...goals, newGoal]);
-    setNewGoalText('');
+    setNewGoalDescription('');
   };
 
   const handleRemoveGoal = (id: string) => {
     onChange(goals.filter(g => g.id !== id));
   };
 
-  const handleAddSuggestion = (text: string, category: Goal['category']) => {
+  const handleAddSuggestion = (description: string, category: Goal['category']) => {
     const newGoal: Goal = {
       id: `goal-${Date.now()}`,
-      text,
+      description,
       priority: 'medium',
       category,
+      status: 'pending',
     };
     onChange([...goals, newGoal]);
   };
@@ -232,7 +236,7 @@ const GoalsWizard: React.FC<GoalsWizardProps> = ({
                   {GOAL_ICONS[goal.category]}
                 </ListItemIcon>
                 <ListItemText
-                  primary={goal.text}
+                  primary={goal.description}
                   secondary={
                     <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                       <Chip
@@ -308,15 +312,15 @@ const GoalsWizard: React.FC<GoalsWizardProps> = ({
           <TextField
             fullWidth
             placeholder="Enter your goal (e.g., 'Support 10,000 concurrent users')"
-            value={newGoalText}
-            onChange={(e) => setNewGoalText(e.target.value)}
+            value={newGoalDescription}
+            onChange={(e) => setNewGoalDescription(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleAddGoal()}
           />
 
           <Button
             variant="contained"
             onClick={handleAddGoal}
-            disabled={!newGoalText.trim()}
+            disabled={!newGoalDescription.trim()}
             startIcon={<Add />}
           >
             Add Goal
@@ -335,7 +339,7 @@ const GoalsWizard: React.FC<GoalsWizardProps> = ({
                   key={index}
                   label={suggestion}
                   size="small"
-                  onClick={() => setNewGoalText(suggestion)}
+                  onClick={() => setNewGoalDescription(suggestion)}
                   clickable
                   variant="outlined"
                 />

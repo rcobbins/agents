@@ -176,19 +176,48 @@ class BaseAgent extends EventEmitter {
    */
   async askClaude(prompt, context = '') {
     try {
-      const projectContext = context || `
-Project Vision:
-${this.projectVision || 'Not loaded'}
+      // Limit context size to prevent command-line issues
+      const MAX_CONTEXT_LENGTH = 5000;
+      
+      // Build context with size limits
+      let projectContext = context;
+      if (!projectContext) {
+        const visionSummary = this.projectVision ? 
+          this.projectVision.substring(0, 1000) + (this.projectVision.length > 1000 ? '...[truncated]' : '') : 
+          'Not loaded';
+        
+        const specSummary = this.projectSpec ? 
+          this.projectSpec.substring(0, 1500) + (this.projectSpec.length > 1500 ? '...[truncated]' : '') : 
+          'Not loaded';
+        
+        const goalsSummary = Array.isArray(this.goals) && this.goals.length > 0 ? 
+          JSON.stringify(this.goals.slice(0, 5), null, 2) + (this.goals.length > 5 ? '\n...[more goals]' : '') : 
+          'Not loaded or empty';
+        
+        const instructionsSummary = this.agentInstructions ? 
+          this.agentInstructions.substring(0, 500) + (this.agentInstructions.length > 500 ? '...[truncated]' : '') : 
+          'Not loaded';
+        
+        projectContext = `
+Project Vision Summary:
+${visionSummary}
 
-Project Specification:
-${this.projectSpec || 'Not loaded'}
+Project Specification Summary:
+${specSummary}
 
-Goals:
-${JSON.stringify(this.goals, null, 2) || 'Not loaded'}
+Key Goals (first 5):
+${goalsSummary}
 
 Agent Instructions:
-${this.agentInstructions || 'Not loaded'}
+${instructionsSummary}
 `;
+      }
+      
+      // Ensure total context doesn't exceed limit
+      if (projectContext.length > MAX_CONTEXT_LENGTH) {
+        projectContext = projectContext.substring(0, MAX_CONTEXT_LENGTH) + '\n...[context truncated due to size]';
+        this.log(`Context truncated from ${projectContext.length} to ${MAX_CONTEXT_LENGTH} chars`);
+      }
       
       const response = await this.claude.ask(prompt, {
         projectContext: projectContext,
@@ -259,15 +288,45 @@ ${this.agentInstructions || 'Not loaded'}
       const goalsPath = path.join(this.projectDir, 'GOALS.json');
       if (await this.fileExists(goalsPath)) {
         const goalsContent = await fs.readFile(goalsPath, 'utf8');
-        this.goals = JSON.parse(goalsContent);
-        this.log(`Loaded ${this.goals.length || 0} project goals from project root`);
+        try {
+          const goalsData = JSON.parse(goalsContent);
+          
+          // Support both old format (direct array) and new format (nested)
+          if (Array.isArray(goalsData)) {
+            this.goals = goalsData;
+          } else if (goalsData && Array.isArray(goalsData.goals)) {
+            this.goals = goalsData.goals;
+          } else {
+            this.goals = [];
+            this.log('Warning: GOALS.json has unexpected format, using empty array');
+          }
+          this.log(`Loaded ${this.goals.length} project goals from project root`);
+        } catch (error) {
+          this.goals = [];
+          this.logError(`Failed to parse GOALS.json from project root: ${error.message}`);
+        }
       } else {
         // Fallback to .agents/docs directory
         const fallbackGoalsPath = path.join(this.directories.docs, 'GOALS.json');
         if (await this.fileExists(fallbackGoalsPath)) {
           const goalsContent = await fs.readFile(fallbackGoalsPath, 'utf8');
-          this.goals = JSON.parse(goalsContent);
-          this.log(`Loaded ${this.goals.length || 0} project goals from .agents/docs`);
+          try {
+            const goalsData = JSON.parse(goalsContent);
+            
+            // Support both old format (direct array) and new format (nested)
+            if (Array.isArray(goalsData)) {
+              this.goals = goalsData;
+            } else if (goalsData && Array.isArray(goalsData.goals)) {
+              this.goals = goalsData.goals;
+            } else {
+              this.goals = [];
+              this.log('Warning: GOALS.json has unexpected format, using empty array');
+            }
+            this.log(`Loaded ${this.goals.length} project goals from .agents/docs`);
+          } catch (error) {
+            this.goals = [];
+            this.logError(`Failed to parse GOALS.json from .agents/docs: ${error.message}`);
+          }
         }
       }
       

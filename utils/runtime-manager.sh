@@ -83,12 +83,19 @@ stop_service() {
     local service_name="$1"
     local pid=$(read_pid "$service_name")
     
-    if [ -z "$pid" ]; then
-        echo -e "${YELLOW}Service $service_name is not running${NC}"
-        return 0
-    fi
+    # Also check for processes on specific ports
+    local port=""
+    case "$service_name" in
+        web-client)
+            port="3000"
+            ;;
+        web-server)
+            port="3001"
+            ;;
+    esac
     
-    if is_process_running "$pid"; then
+    # Stop by PID if we have one
+    if [ -n "$pid" ] && is_process_running "$pid"; then
         echo -e "${YELLOW}Stopping $service_name (PID: $pid)...${NC}"
         kill "$pid" 2>/dev/null || true
         
@@ -104,8 +111,40 @@ stop_service() {
             echo -e "${YELLOW}Force stopping $service_name...${NC}"
             kill -9 "$pid" 2>/dev/null || true
         fi
-        
+    fi
+    
+    # Also kill any process on the associated port
+    if [ -n "$port" ]; then
+        if command -v lsof > /dev/null 2>&1; then
+            local port_pids=$(lsof -t -i:$port 2>/dev/null || true)
+            if [ -n "$port_pids" ]; then
+                echo -e "${YELLOW}Found additional processes on port $port, stopping them...${NC}"
+                for port_pid in $port_pids; do
+                    echo -e "${YELLOW}  Stopping PID $port_pid on port $port${NC}"
+                    kill "$port_pid" 2>/dev/null || true
+                    sleep 1
+                    # Force kill if still running
+                    if kill -0 "$port_pid" 2>/dev/null; then
+                        kill -9 "$port_pid" 2>/dev/null || true
+                    fi
+                done
+            fi
+        fi
+    fi
+    
+    # Final verification that port is free
+    if [ -n "$port" ] && ! is_port_available "$port"; then
+        echo -e "${YELLOW}Port $port still in use, attempting cleanup...${NC}"
+        # Try using fuser as fallback
+        if command -v fuser > /dev/null 2>&1; then
+            fuser -k $port/tcp 2>/dev/null || true
+        fi
+    fi
+    
+    if [ -n "$pid" ] || [ -n "$port_pids" ]; then
         echo -e "${GREEN}$service_name stopped${NC}"
+    else
+        echo -e "${YELLOW}Service $service_name was not running${NC}"
     fi
     
     remove_pid "$service_name"

@@ -1,8 +1,10 @@
 export interface ProjectGoal {
   id: string;
-  text: string;
+  description: string;
   priority: 'high' | 'medium' | 'low';
   category: 'performance' | 'security' | 'scalability' | 'cost' | 'timeline' | 'custom';
+  status?: 'pending' | 'in-progress' | 'completed';
+  acceptanceCriteria?: string[];
   metrics?: string[];
 }
 
@@ -27,6 +29,38 @@ export interface Architecture {
   features: string[];
 }
 
+export interface ProjectVision {
+  productType?: string;
+  productName?: string;
+  tagline?: string;
+  problemStatement?: string;
+  targetAudience?: string;
+  coreFeatures?: string[];
+  uniqueValue?: string;
+  successMetrics?: string[];
+  constraints?: string[];
+}
+
+export interface Requirement {
+  id: string;
+  type: 'functional' | 'non-functional' | 'business' | 'technical';
+  priority: 'must-have' | 'should-have' | 'nice-to-have';
+  description: string;
+  acceptanceCriteria: string[];
+  rationale: string;
+}
+
+export interface ProjectRequirements {
+  problemStatement?: string;
+  targetUsers?: string[];
+  businessValue?: string;
+  successCriteria?: string[];
+  requirements?: Requirement[];
+  constraints?: string[];
+  assumptions?: string[];
+  outOfScope?: string[];
+}
+
 export interface ProjectConfig {
   name: string;
   type: string;
@@ -34,6 +68,8 @@ export interface ProjectConfig {
   path: string;
   techStack: string[];
   goals?: ProjectGoal[];
+  vision?: ProjectVision;
+  requirements?: ProjectRequirements;
   testingStrategy: TestingStrategy;
   architecture: Architecture;
   teamSize?: number;

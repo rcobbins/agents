@@ -13,6 +13,8 @@ export interface ProjectTemplate {
   goals: Array<{
     description: string;
     priority: 'high' | 'medium' | 'low';
+    status?: 'pending' | 'in-progress' | 'completed';
+    acceptanceCriteria?: string[];
   }>;
   testing: {
     framework: string;
@@ -21,6 +23,33 @@ export interface ProjectTemplate {
   architecture: {
     type: string;
     components: string[];
+  };
+  vision?: {
+    productType?: string;
+    productName?: string;
+    tagline?: string;
+    problemStatement?: string;
+    targetAudience?: string;
+    coreFeatures?: string[];
+    uniqueValue?: string;
+    successMetrics?: string[];
+    constraints?: string[];
+  };
+  requirements?: {
+    problemStatement?: string;
+    targetUsers?: string[];
+    businessValue?: string;
+    successCriteria?: string[];
+    requirements?: Array<{
+      type: 'functional' | 'non-functional' | 'business' | 'technical';
+      priority: 'must-have' | 'should-have' | 'nice-to-have';
+      description: string;
+      acceptanceCriteria: string[];
+      rationale: string;
+    }>;
+    constraints?: string[];
+    assumptions?: string[];
+    outOfScope?: string[];
   };
   setupTime: string;
   popularityScore: number;
@@ -40,14 +69,212 @@ export const PROJECT_TEMPLATES: Record<string, ProjectTemplate> = {
       entryPoint: 'src/index.tsx'
     },
     goals: [
-      { description: 'Build a full-stack web application with React and Node.js', priority: 'high' },
-      { description: 'Implement user authentication and authorization', priority: 'high' },
-      { description: 'Create RESTful API endpoints with Express', priority: 'high' },
-      { description: 'Set up PostgreSQL database with migrations', priority: 'high' },
-      { description: 'Achieve 80% test coverage with Jest', priority: 'medium' },
-      { description: 'Implement caching with Redis', priority: 'medium' },
-      { description: 'Deploy with Docker containers', priority: 'low' }
+      { 
+        description: 'Build a full-stack web application with React and Node.js', 
+        priority: 'high',
+        status: 'pending',
+        acceptanceCriteria: [
+          'Frontend renders without errors',
+          'Backend API is accessible',
+          'Frontend can communicate with backend',
+          'Basic routing is functional'
+        ]
+      },
+      { 
+        description: 'Implement user authentication and authorization', 
+        priority: 'high',
+        status: 'pending',
+        acceptanceCriteria: [
+          'Users can register with email/password',
+          'Users can log in and receive JWT token',
+          'Protected routes require authentication',
+          'Role-based access control is implemented'
+        ]
+      },
+      { 
+        description: 'Create RESTful API endpoints with Express', 
+        priority: 'high',
+        status: 'pending',
+        acceptanceCriteria: [
+          'All CRUD operations are implemented',
+          'Proper HTTP status codes are returned',
+          'Input validation is in place',
+          'Error responses follow consistent format'
+        ]
+      },
+      { 
+        description: 'Set up PostgreSQL database with migrations', 
+        priority: 'high',
+        status: 'pending',
+        acceptanceCriteria: [
+          'Database connection is established',
+          'Migration system is configured',
+          'Initial schema is created',
+          'Seeds for development data exist'
+        ]
+      },
+      { 
+        description: 'Achieve 80% test coverage with Jest', 
+        priority: 'medium',
+        status: 'pending',
+        acceptanceCriteria: [
+          'Unit tests for all services',
+          'Integration tests for API endpoints',
+          'Coverage report shows >= 80%',
+          'Tests run in CI/CD pipeline'
+        ]
+      },
+      { 
+        description: 'Implement caching with Redis', 
+        priority: 'medium',
+        status: 'pending',
+        acceptanceCriteria: [
+          'Redis connection is established',
+          'Frequently accessed data is cached',
+          'Cache invalidation strategy is implemented',
+          'Performance improvement is measurable'
+        ]
+      },
+      { 
+        description: 'Deploy with Docker containers', 
+        priority: 'low',
+        status: 'pending',
+        acceptanceCriteria: [
+          'Dockerfile for each service exists',
+          'docker-compose.yml is configured',
+          'Application runs in containers locally',
+          'Production deployment strategy is documented'
+        ]
+      }
     ],
+    vision: {
+      productType: 'saas',
+      productName: 'TaskFlow Pro',
+      tagline: 'Streamline your team\'s workflow with intelligent task management',
+      problemStatement: 'Teams struggle with task coordination, leading to missed deadlines, duplicated work, and poor visibility into project progress. Existing tools are either too complex or lack essential collaboration features.',
+      targetAudience: 'Small to medium-sized software development teams (5-50 people) who need better project visibility and coordination',
+      coreFeatures: [
+        'Real-time collaborative task boards',
+        'Automated workflow triggers and notifications',
+        'Time tracking and estimation',
+        'Sprint planning and retrospectives',
+        'Integration with Git, Slack, and JIRA',
+        'Advanced analytics and reporting'
+      ],
+      uniqueValue: 'AI-powered task prioritization and workload balancing that learns from your team\'s patterns to optimize productivity',
+      successMetrics: [
+        '1000 active users within 3 months',
+        'Average session duration > 15 minutes',
+        '4.5+ star rating from users',
+        '< 2 second page load time',
+        '99.9% uptime',
+        '30% reduction in project delivery time for users'
+      ],
+      constraints: [
+        'Initial development budget of $50,000',
+        'Must be GDPR compliant',
+        'Should work on mobile browsers',
+        '3-month timeline to MVP'
+      ]
+    },
+    requirements: {
+      problemStatement: 'Development teams need a streamlined way to manage tasks, track progress, and collaborate effectively without the complexity of enterprise tools',
+      targetUsers: [
+        'Project Managers',
+        'Software Developers',
+        'QA Engineers',
+        'Product Owners',
+        'Scrum Masters'
+      ],
+      businessValue: 'Reduces project delivery time by 30%, improves team collaboration, and provides clear visibility into project health, ultimately increasing team productivity and client satisfaction',
+      successCriteria: [
+        'Users can create and manage projects within 2 minutes',
+        'Real-time updates visible to all team members',
+        'System handles 100 concurrent users without performance degradation',
+        'Mobile-responsive design works on all major browsers',
+        'Data is backed up hourly with point-in-time recovery'
+      ],
+      requirements: [
+        {
+          type: 'functional',
+          priority: 'must-have',
+          description: 'User authentication and team management',
+          acceptanceCriteria: [
+            'Users can sign up with email or OAuth providers',
+            'Team admins can invite/remove members',
+            'Role-based permissions are enforced',
+            'Password reset functionality works'
+          ],
+          rationale: 'Core functionality required for multi-user collaboration'
+        },
+        {
+          type: 'functional',
+          priority: 'must-have',
+          description: 'Task board with drag-and-drop functionality',
+          acceptanceCriteria: [
+            'Tasks can be created, edited, and deleted',
+            'Drag-and-drop between columns updates task status',
+            'Changes are reflected in real-time for all users',
+            'Board state persists across sessions'
+          ],
+          rationale: 'Primary interface for task management'
+        },
+        {
+          type: 'non-functional',
+          priority: 'must-have',
+          description: 'Performance requirements',
+          acceptanceCriteria: [
+            'Page load time < 2 seconds on 3G connection',
+            'API response time < 200ms for 95% of requests',
+            'Support 100 concurrent users per instance',
+            'Client-side caching reduces server load'
+          ],
+          rationale: 'Poor performance will drive users away'
+        },
+        {
+          type: 'business',
+          priority: 'should-have',
+          description: 'Subscription and billing management',
+          acceptanceCriteria: [
+            'Multiple subscription tiers available',
+            'Stripe integration for payments',
+            'Usage limits enforced per tier',
+            'Billing history accessible to users'
+          ],
+          rationale: 'Required for monetization strategy'
+        },
+        {
+          type: 'technical',
+          priority: 'must-have',
+          description: 'Data security and compliance',
+          acceptanceCriteria: [
+            'All data encrypted at rest and in transit',
+            'GDPR compliance for EU users',
+            'Regular security audits performed',
+            'Data export functionality for users'
+          ],
+          rationale: 'Legal requirement and trust building'
+        }
+      ],
+      constraints: [
+        'Must use existing PostgreSQL infrastructure',
+        'Cannot exceed $500/month in hosting costs initially',
+        'Must integrate with company\'s existing SSO system'
+      ],
+      assumptions: [
+        'Users have modern browsers (Chrome, Firefox, Safari, Edge)',
+        'Users have stable internet connection',
+        'Team size typically 5-50 members',
+        'English-only interface initially'
+      ],
+      outOfScope: [
+        'Native mobile applications',
+        'Offline mode',
+        'Video conferencing features',
+        'AI-powered code generation',
+        'Enterprise features (advanced permissions, audit logs)'
+      ]
+    },
     testing: { framework: 'Jest', coverage: 80 },
     architecture: {
       type: 'layered',

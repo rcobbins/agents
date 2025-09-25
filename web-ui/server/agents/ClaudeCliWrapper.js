@@ -1,7 +1,9 @@
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { promisify } = require('util');
 const path = require('path');
 const fs = require('fs').promises;
+const os = require('os');
+const crypto = require('crypto');
 
 const execFilePromise = promisify(execFile);
 
@@ -139,7 +141,7 @@ Provide constructive feedback that improves code quality.`
       const { 
         outputFormat = 'text',
         projectContext = '',
-        timeout = 60000,
+        timeout = 300000, // 5 minutes for large prompts
         retryOnError = true
       } = options;
       
@@ -147,7 +149,15 @@ Provide constructive feedback that improves code quality.`
       const session = await this.getOrCreateSession();
       
       // Build system prompt with project context
-      const systemPrompt = this.getSystemPromptWithContext(projectContext);
+      let systemPrompt = this.getSystemPromptWithContext(projectContext);
+      
+      const MAX_PROMPT_LENGTH = 10000; // Limit for command-line arguments
+      const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+      
+      // Log prompt size for debugging
+      if (fullPrompt.length > MAX_PROMPT_LENGTH) {
+        await this.log(`Large prompt detected: ${fullPrompt.length} chars, using stdin piping with ${timeout/1000}s timeout`);
+      }
       
       // Build command arguments
       const args = ['--print'];
@@ -159,31 +169,79 @@ Provide constructive feedback that improves code quality.`
         args.push('--session-id', session.uuid);
       }
       
-      // Add system prompt
-      if (systemPrompt) {
-        args.push('--append-system-prompt', systemPrompt);
-      }
-      
       // Add output format if JSON requested
       if (outputFormat === 'json') {
         args.push('--output-format', 'json');
       }
       
-      // Add the user prompt as the last argument
-      args.push(userPrompt);
-      
       // Execute Claude CLI
       let result;
       try {
-        result = await execFilePromise(this.claudePath, args, {
-          maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-          timeout: timeout,
-          env: {
-            ...process.env,
-            // Ensure PATH includes claude location
-            PATH: `/home/rob/bin:${process.env.PATH}`
+        // Handle large prompts using stdin piping
+        if (fullPrompt.length > MAX_PROMPT_LENGTH) {
+          // Use spawn for stdin piping
+          result = await new Promise((resolve, reject) => {
+            const child = spawn(this.claudePath, args, {
+              env: {
+                ...process.env,
+                PATH: `/home/rob/bin:${process.env.PATH}`
+              }
+            });
+            
+            let stdout = '';
+            let stderr = '';
+            
+            // Collect output
+            child.stdout.on('data', (data) => {
+              stdout += data.toString();
+            });
+            
+            child.stderr.on('data', (data) => {
+              stderr += data.toString();
+            });
+            
+            // Handle completion
+            child.on('close', (code) => {
+              if (code === 0) {
+                resolve({ stdout, stderr });
+              } else {
+                const error = new Error(`Command failed: ${this.claudePath} ${args.join(' ')}\n${stderr}`);
+                error.code = code;
+                reject(error);
+              }
+            });
+            
+            // Handle errors
+            child.on('error', reject);
+            
+            // Write the full prompt to stdin
+            child.stdin.write(fullPrompt);
+            child.stdin.end();
+            
+            // Set timeout
+            if (timeout) {
+              setTimeout(() => {
+                child.kill('SIGTERM');
+                reject(new Error('Process timeout'));
+              }, timeout);
+            }
+          });
+        } else {
+          // For smaller prompts, use the regular approach
+          if (systemPrompt) {
+            args.push('--append-system-prompt', systemPrompt);
           }
-        });
+          args.push(userPrompt);
+          
+          result = await execFilePromise(this.claudePath, args, {
+            maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+            timeout: timeout,
+            env: {
+              ...process.env,
+              PATH: `/home/rob/bin:${process.env.PATH}`
+            }
+          });
+        }
         
         // Update session state on successful call
         if (session.type === 'new') {
@@ -194,10 +252,25 @@ Provide constructive feedback that improves code quality.`
       } catch (error) {
         console.error(`Claude CLI error: ${error.message}`);
         
-        // Retry with new session if it was a resume attempt
-        if (retryOnError && session.type === 'resume') {
-          console.log('Retrying with new session...');
-          await this.saveSessionState(session.uuid, false);
+        // Log more details for debugging
+        if (error.code === 'E2BIG') {
+          console.error('Command too long. This should not happen with stdin approach.');
+        }
+        
+        // Handle "already in use" error by switching to resume
+        if (error.message.includes('already in use') && session.type === 'new' && retryOnError) {
+          console.log('Session already exists, switching to resume mode...');
+          await this.saveSessionState(session.uuid, true); // Mark session as existing
+          // Retry with resume
+          return this.ask(userPrompt, { ...options, retryOnError: false });
+        }
+        
+        // Retry with new session if it was a resume attempt that failed
+        if (retryOnError && session.type === 'resume' && !error.message.includes('already in use')) {
+          console.log('Resume failed, trying with new session...');
+          // Generate new UUID for fresh session
+          const newUuid = this.generateUuid();
+          await this.saveSessionState(newUuid, false);
           return this.ask(userPrompt, { ...options, retryOnError: false });
         }
         
@@ -291,6 +364,13 @@ ${projectContext}`;
       console.error('Claude CLI not available:', error.message);
       return false;
     }
+  }
+  
+  /**
+   * Simple logging function
+   */
+  async log(message) {
+    console.log(`[${this.agentName}] ${message}`);
   }
   
   /**

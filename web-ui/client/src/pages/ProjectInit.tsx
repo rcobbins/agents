@@ -41,6 +41,8 @@ import ArchitectureHelper from '../components/project-init/ArchitectureHelper';
 import ComplexityEstimator from '../components/project-init/ComplexityEstimator';
 import ReviewWithValidation from '../components/project-init/ReviewWithValidation';
 import ProjectAssistantPanel from '../components/project-init/ProjectAssistantPanel';
+import ProjectVisionWizard from '../components/project-init/ProjectVisionWizard';
+import RequirementsWizard from '../components/project-init/RequirementsWizard';
 
 // Import types
 import { ProjectConfig } from '../types/project';
@@ -48,11 +50,13 @@ import { PROJECT_TEMPLATES, ProjectTemplate } from '../data/projectTemplates';
 
 const STEPS_GUIDED = [
   { label: 'Setup Mode', id: 'mode' },
+  { label: 'Project Vision', id: 'vision' },
+  { label: 'Requirements', id: 'requirements' },
   { label: 'Basic Info', id: 'info' },
   { label: 'Project Type', id: 'type' },
   { label: 'Choose Template', id: 'template' },
-  { label: 'Technology Stack', id: 'techstack' },
   { label: 'Project Goals', id: 'goals' },
+  { label: 'Technology Stack', id: 'techstack' },
   { label: 'Testing Strategy', id: 'testing' },
   { label: 'Architecture', id: 'architecture' },
   { label: 'Complexity Analysis', id: 'complexity' },
@@ -80,6 +84,8 @@ function ProjectInit() {
     path: '',
     techStack: [],
     goals: [],
+    vision: {},
+    requirements: {},
     testingStrategy: {
       unitTestCoverage: 70,
       integrationTesting: false,
@@ -137,21 +143,29 @@ function ProjectInit() {
     setProjectConfig(prev => ({
       ...prev,
       name: template.name,
+      type: template.category, // Set project type from template category
       description: template.description,
       techStack: template.techStack,
+      vision: template.vision || {},
+      requirements: template.requirements || {},
       goals: template.goals.map((goal, index) => ({
         id: `goal-${index}`,
-        text: goal.description,
+        description: goal.description,
         priority: goal.priority,
+        status: goal.status || 'pending',
+        acceptanceCriteria: goal.acceptanceCriteria || [],
         category: 'custom' as const,
+        metrics: [],
       })),
       architecture: {
         ...prev.architecture,
         pattern: (template.architecture as any).type || (template.architecture as any).pattern || 'monolithic',
+        components: template.architecture.components || [],
       },
       testingStrategy: {
         ...prev.testingStrategy,
-        ...template.testing,
+        unitTestCoverage: template.testing.coverage,
+        frameworks: template.testing.framework ? [template.testing.framework] : [],
       },
     }));
     
@@ -220,6 +234,28 @@ function ProjectInit() {
             mode={mode}
             onChange={setMode}
             experience={experience}
+          />
+        );
+
+      case 'vision':
+        return (
+          <ProjectVisionWizard
+            vision={projectConfig.vision || {}}
+            onChange={(vision) => 
+              setProjectConfig(prev => ({ ...prev, vision }))
+            }
+            projectType={projectConfig.type}
+          />
+        );
+
+      case 'requirements':
+        return (
+          <RequirementsWizard
+            requirements={projectConfig.requirements || {}}
+            onChange={(requirements) => 
+              setProjectConfig(prev => ({ ...prev, requirements }))
+            }
+            projectType={projectConfig.type}
           />
         );
 
@@ -435,29 +471,40 @@ function ProjectInit() {
               onClick={() => {
                 // Load the demo template
                 const demoTemplate = PROJECT_TEMPLATES['init-demo'];
-                // Set the project config without auto-advancing
+                // Set the project config with ALL fields from demo
                 setProjectConfig(prev => ({
                   ...prev,
                   name: demoTemplate.name,
+                  type: demoTemplate.category, // Set the project type from template category
                   path: `~/projects/${demoTemplate.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`,
                   description: demoTemplate.description,
                   techStack: demoTemplate.techStack,
+                  // Copy vision if it exists
+                  vision: demoTemplate.vision || {},
+                  // Copy requirements if they exist
+                  requirements: demoTemplate.requirements || {},
+                  // Map goals with correct field names and all properties
                   goals: demoTemplate.goals.map((goal, index) => ({
                     id: `goal-${index}`,
-                    text: goal.description,
+                    description: goal.description, // Use 'description' not 'text'
                     priority: goal.priority,
+                    status: goal.status || 'pending',
+                    acceptanceCriteria: goal.acceptanceCriteria || [],
                     category: 'custom' as const,
+                    metrics: [],
                   })),
                   architecture: {
                     ...prev.architecture,
                     pattern: (demoTemplate.architecture as any).type || (demoTemplate.architecture as any).pattern || 'monolithic',
+                    components: demoTemplate.architecture.components || [],
                   },
                   testingStrategy: {
                     ...prev.testingStrategy,
-                    ...demoTemplate.testing,
+                    unitTestCoverage: demoTemplate.testing.coverage,
+                    frameworks: demoTemplate.testing.framework ? [demoTemplate.testing.framework] : [],
                   },
                 }));
-                toast.success('Demo project loaded! Review and click Generate to create.');
+                toast.success('Demo project loaded! All fields populated including vision and requirements.');
                 // Jump directly to review step
                 setActiveStep(steps.length - 1);
               }}

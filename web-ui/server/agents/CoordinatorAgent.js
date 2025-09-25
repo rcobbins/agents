@@ -30,7 +30,18 @@ class CoordinatorAgent extends BaseAgent {
     // Load or create task queue
     if (await this.fileExists(this.taskQueueFile)) {
       const content = await fs.readFile(this.taskQueueFile, 'utf8');
-      this.taskQueue = JSON.parse(content);
+      try {
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) {
+          this.taskQueue = parsed;
+        } else {
+          this.taskQueue = [];
+          await this.logError('Task queue file has invalid format, using empty array');
+        }
+      } catch (error) {
+        this.taskQueue = [];
+        await this.logError(`Failed to parse task queue: ${error.message}`);
+      }
       await this.log(`Loaded ${this.taskQueue.length} tasks from queue`);
     } else {
       await fs.writeFile(this.taskQueueFile, '[]');
@@ -39,7 +50,18 @@ class CoordinatorAgent extends BaseAgent {
     // Load or create work log
     if (await this.fileExists(this.workLogFile)) {
       const content = await fs.readFile(this.workLogFile, 'utf8');
-      this.workLog = JSON.parse(content);
+      try {
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) {
+          this.workLog = parsed;
+        } else {
+          this.workLog = [];
+          await this.logError('Work log file has invalid format, using empty array');
+        }
+      } catch (error) {
+        this.workLog = [];
+        await this.logError(`Failed to parse work log: ${error.message}`);
+      }
       await this.log(`Loaded ${this.workLog.length} completed work items`);
     } else {
       await fs.writeFile(this.workLogFile, '[]');
@@ -48,7 +70,7 @@ class CoordinatorAgent extends BaseAgent {
     // Initialize agent status
     for (const agent of this.agents) {
       this.agentStatus[agent] = {
-        status: 'unknown',
+        status: 'available',  // Changed from 'unknown' to 'available' so agents can receive tasks
         lastSeen: null,
         currentTask: null,
         tasksCompleted: 0
@@ -202,16 +224,21 @@ Format the response as a JSON array of task objects.`;
     
     for (const task of availableTasks) {
       const agent = task.assignedAgent;
+      const agentStatus = this.agentStatus[agent].status;
       
-      // Check if agent is available
-      if (this.agentStatus[agent].status === 'busy') {
+      // Check if agent is available (not busy)
+      if (agentStatus === 'busy') {
         await this.log(`Agent ${agent} is busy, skipping task ${task.id}`);
         continue;
       }
       
-      // Send task to agent
-      await this.log(`Assigning task ${task.id} to available agent ${agent}`);
-      await this.assignTaskToAgent(task, agent);
+      // Agent is available or unknown - assign the task
+      if (agentStatus === 'available' || agentStatus === 'unknown') {
+        await this.log(`Assigning task ${task.id} to ${agentStatus} agent ${agent}`);
+        await this.assignTaskToAgent(task, agent);
+      } else {
+        await this.log(`Agent ${agent} has unexpected status: ${agentStatus}, skipping task ${task.id}`);
+      }
     }
   }
   
@@ -219,16 +246,38 @@ Format the response as a JSON array of task objects.`;
    * Get tasks that are ready to be executed (dependencies met)
    */
   getAvailableTasks() {
+    const MAX_RETRY_ATTEMPTS = 5;
+    
     // Log current task queue state
     const pendingTasks = this.taskQueue.filter(task => task.status === 'pending');
+    const failedTasks = this.taskQueue.filter(task => task.status === 'failed');
     const inProgressTasks = this.taskQueue.filter(task => task.status === 'in_progress');
+    
+    if (pendingTasks.length === 0 && failedTasks.length > 0) {
+      this.log(`No pending tasks, but ${failedTasks.length} failed tasks that may be retried`);
+    }
     
     if (pendingTasks.length === 0 && inProgressTasks.length > 0) {
       this.log(`No pending tasks, but ${inProgressTasks.length} tasks in progress: ${inProgressTasks.map(t => t.id).join(', ')}`);
     }
     
     return this.taskQueue
-      .filter(task => task.status === 'pending')
+      .filter(task => {
+        // Include pending tasks and failed tasks that can be retried
+        if (task.status === 'pending') return true;
+        if (task.status === 'failed' && (task.attempts || 0) < MAX_RETRY_ATTEMPTS) {
+          // Check if enough time has passed since last failure (exponential backoff)
+          const lastFailure = task.failedAt ? new Date(task.failedAt).getTime() : 0;
+          const backoffTime = Math.min(60000 * Math.pow(2, task.attempts || 0), 300000); // Max 5 minutes
+          const timeSinceFailure = Date.now() - lastFailure;
+          
+          if (timeSinceFailure >= backoffTime) {
+            this.log(`Task ${task.id} ready for retry (attempt ${(task.attempts || 0) + 1}/${MAX_RETRY_ATTEMPTS})`);
+            return true;
+          }
+        }
+        return false;
+      })
       .filter(task => {
         // Check if all dependencies are completed
         return task.dependencies.every(depId => {
@@ -249,10 +298,18 @@ Format the response as a JSON array of task objects.`;
   async assignTaskToAgent(task, agentName) {
     await this.log(`Assigning task ${task.id} to ${agentName}`);
     
-    // Update task status
+    // Update task status (reset from failed if retrying)
+    const wasFailedTask = task.status === 'failed';
     task.status = 'in_progress';
     task.assignedAt = new Date().toISOString();
-    task.attempts++;
+    task.attempts = (task.attempts || 0) + 1;
+    
+    if (wasFailedTask) {
+      await this.log(`Retrying previously failed task ${task.id} (attempt ${task.attempts})`);
+      delete task.failedAt;
+      delete task.error;
+    }
+    
     await this.saveTaskQueue();
     
     // Update agent status
@@ -371,17 +428,18 @@ Only generate tasks that are directly actionable. Return empty array if no follo
   async handleTaskFailure(taskId, error, agentName) {
     await this.logError(`Task ${taskId} failed: ${error}`);
     
+    const MAX_RETRY_ATTEMPTS = 5;
     const task = this.taskQueue.find(t => t.id === taskId);
     if (task) {
-      // Retry if attempts < 3
-      if (task.attempts < 3) {
-        task.status = 'pending';
-        await this.log(`Retrying task ${taskId} (attempt ${task.attempts + 1})`);
+      // Mark as failed but allow retry later via getAvailableTasks
+      task.status = 'failed';
+      task.failedAt = new Date().toISOString();
+      task.error = error;
+      
+      if ((task.attempts || 0) < MAX_RETRY_ATTEMPTS) {
+        await this.log(`Task ${taskId} failed on attempt ${task.attempts}. Will retry later (${MAX_RETRY_ATTEMPTS - task.attempts} attempts remaining)`);
       } else {
-        task.status = 'failed';
-        task.failedAt = new Date().toISOString();
-        task.error = error;
-        await this.logError(`Task ${taskId} failed after 3 attempts`);
+        await this.logError(`Task ${taskId} permanently failed after ${MAX_RETRY_ATTEMPTS} attempts`);
       }
       
       await this.saveTaskQueue();

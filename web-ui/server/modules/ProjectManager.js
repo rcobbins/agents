@@ -88,8 +88,31 @@ class ProjectManager {
       }
     }
 
+    // Create .agents directory structure
+    const agentsDir = path.join(projectPath, '.agents');
+    const agentsDirs = [
+      path.join(agentsDir, 'docs'),
+      path.join(agentsDir, 'config'),
+      path.join(agentsDir, 'agents'),
+      path.join(agentsDir, 'logs'),
+      path.join(agentsDir, 'status'),
+      path.join(agentsDir, 'inboxes'),
+      path.join(agentsDir, 'outboxes'),
+      path.join(agentsDir, 'workspace'),
+      path.join(agentsDir, 'archive'),
+    ];
+
+    for (const dir of agentsDirs) {
+      await fs.mkdir(dir, { recursive: true });
+    }
+    this.logger.info(`Created .agents directory structure in: ${projectPath}`);
+
     // Create initial project files
     try {
+      // Create all agent documentation files in .agents/docs
+      const docsDir = path.join(agentsDir, 'docs');
+      const configDir = path.join(agentsDir, 'config');
+      
       // Create README.md
       const readmeContent = `# ${project.name}
 
@@ -117,7 +140,7 @@ Created with Agent Framework
 `;
       await fs.writeFile(path.join(projectPath, 'README.md'), readmeContent);
       
-      // Create PROJECT_SPEC.md
+      // Create PROJECT_SPEC.md in .agents/docs
       const specContent = `# Project Specification: ${project.name}
 
 ## Overview
@@ -136,12 +159,39 @@ ${project.description}
 ${JSON.stringify(projectData, null, 2)}
 \`\`\`
 `;
-      await fs.writeFile(path.join(projectPath, 'PROJECT_SPEC.md'), specContent);
+      await fs.writeFile(path.join(docsDir, 'PROJECT_SPEC.md'), specContent);
       
-      // Create GOALS.json
+      // Create GOALS.json in .agents/docs
+      const goalsData = {
+        project: project.name,
+        version: '0.1.0',
+        generated: new Date().toISOString(),
+        goals: project.goals.map((goal, index) => ({
+          id: goal.id || `goal-${index + 1}`,
+          description: goal.description || goal.text || goal,
+          priority: goal.priority || 'medium',
+          status: goal.status || 'pending',
+          created: new Date().toISOString(),
+          acceptanceCriteria: goal.acceptanceCriteria || [],
+        })),
+        metrics: {
+          test_coverage_target: project.testingStrategy?.unitTestCoverage || 80,
+          test_coverage_current: null,
+          quality_gates: {
+            tests_must_pass: true,
+            linting_required: true,
+            type_checking: project.techStack?.includes('TypeScript') || false,
+          },
+        },
+        progress: {
+          completed_goals: 0,
+          total_goals: project.goals.length,
+          last_updated: new Date().toISOString(),
+        },
+      };
       await fs.writeFile(
-        path.join(projectPath, 'GOALS.json'), 
-        JSON.stringify(project.goals, null, 2)
+        path.join(docsDir, 'GOALS.json'), 
+        JSON.stringify(goalsData, null, 2)
       );
       
       // Create PROJECT_VISION.md if vision data is provided
@@ -174,9 +224,388 @@ ${(project.vision.constraints || []).map(constraint => `- ${constraint}`).join('
 ---
 *This vision document guides the development process and helps agents understand the product context.*
 `;
-        await fs.writeFile(path.join(projectPath, 'PROJECT_VISION.md'), visionContent);
+        await fs.writeFile(path.join(docsDir, 'PROJECT_VISION.md'), visionContent);
       }
       
+      // Create TESTING_STRATEGY.md
+      const testingStrategyContent = `# Testing Strategy for ${project.name}
+
+## Overview
+This document defines the comprehensive testing approach for ${project.name}.
+
+## Test Coverage Requirements
+
+### Minimum Coverage
+- **Target:** ${project.testingStrategy?.unitTestCoverage || 80}%
+- **Stretch Goal:** ${(project.testingStrategy?.unitTestCoverage || 80) + 10}%
+- **Critical Paths:** 100%
+
+### Coverage Metrics
+- Line coverage
+- Branch coverage
+- Function coverage
+
+## Test Categories
+
+### Unit Tests
+- **Purpose:** Test individual functions and components in isolation
+- **Location:** \`${project.testDir || 'tests'}/unit/\`
+- **Naming:** \`*.test.*\` or \`*.spec.*\`
+- **Coverage Goal:** All business logic functions
+
+### Integration Tests  
+- **Purpose:** Test component interactions and API endpoints
+- **Location:** \`${project.testDir || 'tests'}/integration/\`
+- **Enabled:** ${project.testingStrategy?.integrationTesting ? 'Yes' : 'No'}
+- **Coverage Goal:** All API endpoints and service integrations
+
+### End-to-End Tests
+- **Purpose:** Validate complete user workflows
+- **Location:** \`${project.testDir || 'tests'}/e2e/\`
+- **Enabled:** ${project.testingStrategy?.e2eTesting ? 'Yes' : 'No'}
+- **Coverage Goal:** Critical user paths
+
+### Performance Testing
+- **Enabled:** ${project.testingStrategy?.performanceTesting ? 'Yes' : 'No'}
+- **Goals:** Response time < 200ms, Support concurrent users
+
+### Security Testing
+- **Enabled:** ${project.testingStrategy?.securityTesting ? 'Yes' : 'No'}
+- **Focus:** OWASP Top 10, Authentication, Authorization
+
+### Accessibility Testing
+- **Enabled:** ${project.testingStrategy?.accessibilityTesting ? 'Yes' : 'No'}
+- **Standards:** WCAG 2.1 Level AA
+
+## Test Execution
+
+### Command
+\`\`\`bash
+${project.testCommand || 'npm test'}
+\`\`\`
+
+### CI/CD Integration
+- **Enabled:** ${project.testingStrategy?.cicd ? 'Yes' : 'No'}
+- **Automation Level:** ${project.testingStrategy?.automationLevel || 'semi-auto'}
+
+### Continuous Testing
+- Run tests before any commit
+- All tests must pass for work to be considered complete
+- Run full test suite at least once per hour
+
+### Test Development Workflow
+1. Write test first (TDD approach when possible)
+2. Implement feature/fix
+3. Ensure test passes
+4. Check coverage meets requirements
+5. Run full test suite
+
+## Testing Tools
+
+### Frameworks
+${(project.testingStrategy?.frameworks || []).map(f => `- ${f}`).join('\n') || '- To be determined'}
+
+### Technology Stack
+${project.techStack.map(tech => `- ${tech}`).join('\n')}
+
+## Critical Test Areas
+
+### Based on Project Architecture
+- Pattern: ${project.architecture?.pattern || 'Not specified'}
+- Database: ${project.architecture?.database || 'Not specified'}
+- API Style: ${project.architecture?.apiStyle || 'Not specified'}
+
+### Priority Areas for Testing
+1. Core business logic
+2. Data validation and transformation
+3. External service integrations
+4. Error handling and edge cases
+5. Security-sensitive operations
+
+## Test Data Management
+
+### Approach
+- Use fixtures for consistent test data
+- Mock external dependencies
+- Use test databases/environments when needed
+- Clean up test data after execution
+
+## Performance Testing
+
+### Benchmarks
+- Response time requirements: < 2 seconds
+- Throughput expectations: Based on user load
+- Resource usage limits: Monitor memory and CPU
+
+## Agent Guidelines for Testing
+
+### For Tester Agent
+1. Run \`${project.testCommand || 'npm test'}\` regularly
+2. Report all failures immediately
+3. Track coverage trends
+4. Suggest areas needing more tests
+
+### For Coder Agent
+1. Write tests for all new code
+2. Update tests when modifying existing code
+3. Aim for ${project.testingStrategy?.unitTestCoverage || 80}% coverage minimum
+
+### For Reviewer Agent
+1. Verify test coverage in reviews
+2. Check test quality, not just presence
+3. Ensure tests actually validate behavior
+
+---
+*This strategy should be updated as the project evolves.*
+`;
+      await fs.writeFile(path.join(docsDir, 'TESTING_STRATEGY.md'), testingStrategyContent);
+
+      // Create AGENT_INSTRUCTIONS.md
+      const agentInstructionsContent = `# Agent Instructions for ${project.name}
+
+## Overview
+This document provides specific instructions for each agent working on ${project.name}.
+
+## General Instructions (All Agents)
+
+### Project Context
+- **Project Type:** ${project.type}
+- **Technology Stack:** ${project.techStack.join(', ')}
+- **Source Directory:** \`${project.srcDir || 'src'}/\`
+- **Test Directory:** \`${project.testDir || 'tests'}/\`
+- **Test Command:** \`${project.testCommand || 'npm test'}\`
+
+### Quality Standards
+1. Maintain ${project.testingStrategy?.unitTestCoverage || 80}% minimum test coverage
+2. All tests must pass before marking work complete
+3. Follow existing code patterns and conventions
+4. Write clear, maintainable code
+5. Document complex logic
+
+### Communication
+- Report progress regularly to coordinator
+- Request help when blocked
+- Share findings that might help other agents
+
+## Coordinator Agent
+
+### Primary Responsibilities
+1. Orchestrate work across all agents
+2. Prioritize tasks based on GOALS.json
+3. Monitor progress toward objectives
+4. Ensure balanced workload distribution
+
+### Specific Instructions
+- Review GOALS.json daily for priority changes
+- Create task breakdowns for complex goals
+- Track which agent is working on what
+- Identify and resolve bottlenecks
+- Report overall progress metrics
+
+### Success Metrics
+- All goals progressing steadily
+- No agent idle while work exists
+- Dependencies resolved proactively
+
+## Planner Agent
+
+### Primary Responsibilities
+1. Analyze codebase structure and patterns
+2. Create detailed implementation plans
+3. Identify technical dependencies
+4. Suggest architectural improvements
+
+### Specific Instructions
+- Study the project structure in \`${project.srcDir || 'src'}/\`
+- Understand the testing approach in \`${project.testDir || 'tests'}/\`
+- Break complex features into steps
+- Consider the architecture: ${project.architecture?.pattern || 'Not specified'}
+- Identify reusable patterns
+
+### Planning Priorities
+1. Features that support multiple goals
+2. Foundation work that enables future features
+3. Technical debt that blocks progress
+4. Performance and security improvements
+
+## Tester Agent
+
+### Primary Responsibilities
+1. Execute test suite regularly
+2. Analyze test failures
+3. Report coverage metrics
+4. Suggest test improvements
+
+### Specific Instructions
+- Run tests using: \`${project.testCommand || 'npm test'}\`
+- Focus on \`${project.testDir || 'tests'}/\` for test files
+- Maintain ${project.testingStrategy?.unitTestCoverage || 80}% coverage minimum
+- Report failures immediately to coder
+- Track coverage trends over time
+
+### Testing Focus Areas
+${project.architecture?.database ? '- Database operations and queries\n' : ''}- API endpoints and responses
+- Data validation logic
+- Error handling paths
+- Edge cases and boundaries
+
+## Coder Agent
+
+### Primary Responsibilities
+1. Implement new features
+2. Fix bugs and test failures
+3. Write corresponding tests
+4. Refactor and improve code
+
+### Specific Instructions
+- Implement in \`${project.srcDir || 'src'}/\`
+- Write tests in \`${project.testDir || 'tests'}/\`
+- Follow best practices for: ${project.techStack.join(', ')}
+${project.techStack.includes('TypeScript') ? '- Ensure proper TypeScript types\n- Run tsc for type checking\n' : ''}- Test your code before marking complete
+
+### Coding Standards
+1. Clear variable and function names
+2. Consistent indentation and formatting
+3. Comprehensive error handling
+4. Appropriate comments for complex logic
+5. No console.logs or debug prints in final code
+
+## Reviewer Agent
+
+### Primary Responsibilities
+1. Review code quality and standards
+2. Check test coverage
+3. Identify potential issues
+4. Suggest improvements
+
+### Specific Instructions
+- Review all code in \`${project.srcDir || 'src'}/\`
+- Verify tests in \`${project.testDir || 'tests'}/\`
+- Check coverage meets ${project.testingStrategy?.unitTestCoverage || 80}%
+- Ensure consistency with architecture
+- Look for security vulnerabilities
+
+### Review Checklist
+- [ ] Code follows project conventions
+- [ ] Tests cover new/modified code
+- [ ] No obvious bugs or issues
+- [ ] Error handling is appropriate
+- [ ] Documentation is updated if needed
+- [ ] Performance implications considered
+- [ ] Security best practices followed
+
+## Working with Project Goals
+
+All agents should regularly review GOALS.json to understand:
+1. Current priorities
+2. Overall project direction
+3. Success criteria
+
+### Goal Completion Criteria
+A goal is considered complete when:
+1. All requirements are implemented
+2. Tests are written and passing
+3. Code is reviewed and approved
+4. Coverage meets requirements
+5. Documentation is updated
+
+## Collaboration Guidelines
+
+### Inter-Agent Communication
+- **Coordinator → All:** Task assignments and priorities
+- **Planner → Coordinator:** Implementation plans and dependencies
+- **Tester → Coder:** Test failures and coverage gaps
+- **Coder → Tester:** Request testing after changes
+- **Reviewer → Coder:** Issues found during review
+- **All → Coordinator:** Status updates and blockers
+
+### Escalation Path
+1. Try to resolve within agent capabilities
+2. Request help from relevant agent
+3. Escalate to coordinator if blocked
+4. Coordinator may request human intervention
+
+---
+*These instructions are specific to ${project.name} and should be followed by all agents.*
+`;
+      await fs.writeFile(path.join(docsDir, 'AGENT_INSTRUCTIONS.md'), agentInstructionsContent);
+
+      // Create PROJECT_REQUIREMENTS.md if requirements data is provided
+      if (projectData.requirements && Object.keys(projectData.requirements).length > 0) {
+        const req = projectData.requirements;
+        const requirementsContent = `# Project Requirements: ${project.name}
+
+## Problem Statement
+${req.problemStatement || 'Not specified'}
+
+## Target Users
+${(req.targetUsers || []).map(user => `- ${user}`).join('\n') || '- Not specified'}
+
+## Business Value
+${req.businessValue || 'Not specified'}
+
+## Success Criteria
+${(req.successCriteria || []).map(criterion => `- ${criterion}`).join('\n') || '- Not specified'}
+
+## Detailed Requirements
+
+${(req.requirements || []).map(r => `### ${r.description}
+**Type:** ${r.type}\n**Priority:** ${r.priority}\n**Rationale:** ${r.rationale || 'Not specified'}\n\n**Acceptance Criteria:**\n${(r.acceptanceCriteria || []).map(ac => `- ${ac}`).join('\n') || '- Not specified'}\n`).join('\n')}
+
+## Constraints
+${(req.constraints || []).map(c => `- ${c}`).join('\n') || '- None specified'}
+
+## Assumptions
+${(req.assumptions || []).map(a => `- ${a}`).join('\n') || '- None specified'}
+
+## Out of Scope
+${(req.outOfScope || []).map(item => `- ${item}`).join('\n') || '- None specified'}
+
+---
+*This requirements document defines what needs to be built and why.*
+`;
+        await fs.writeFile(path.join(docsDir, 'PROJECT_REQUIREMENTS.md'), requirementsContent);
+      }
+
+      // Create project.conf in .agents/config
+      const projectConfContent = `# Project Configuration for Agent Framework
+# Generated: ${new Date().toISOString()}
+
+# Project Information
+PROJECT_NAME="${project.name}"
+PROJECT_DESC="${project.description}"
+PROJECT_VERSION="0.1.0"
+PROJECT_DIR="${projectPath}"
+
+# Technology Stack
+LANGUAGE="${project.techStack[0] || 'JavaScript'}"
+FRAMEWORKS="${project.techStack.join(', ')}"
+DATABASE="${project.architecture?.database || ''}"
+TEST_FRAMEWORK="${(project.testingStrategy?.frameworks || []).join(', ')}"
+
+# Project Structure
+SRC_DIR="${project.srcDir || 'src'}"
+TEST_DIR="${project.testDir || 'tests'}"
+BUILD_DIR="${project.buildDir || 'dist'}"
+
+# Testing Configuration
+TEST_COMMAND="${project.testCommand || 'npm test'}"
+TEST_COVERAGE="${project.testingStrategy?.unitTestCoverage || 80}"
+
+# Agent Framework
+FRAMEWORK_DIR="/home/rob/agent-framework"
+AGENT_BASE_DIR="${agentsDir}"
+
+# Architecture
+ARCHITECTURE="${project.architecture?.pattern || 'Not specified'}"
+
+# Load framework defaults
+if [ -f "/home/rob/agent-framework/config/default.conf" ]; then
+    source "/home/rob/agent-framework/config/default.conf"
+fi
+`;
+      await fs.writeFile(path.join(configDir, 'project.conf'), projectConfContent);
+
       // Create basic directory structure
       const directories = ['src', 'tests', 'docs', '.github'];
       for (const dir of directories) {
