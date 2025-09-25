@@ -21,6 +21,13 @@ class IntegratedAgentManager extends EventEmitter {
   }
   
   /**
+   * Set the task manager for task distribution
+   */
+  setTaskManager(taskManager) {
+    this.taskManager = taskManager;
+  }
+  
+  /**
    * Launch an agent as an in-process module
    */
   async launchAgent(projectId, agentType, config = {}) {
@@ -69,6 +76,11 @@ class IntegratedAgentManager extends EventEmitter {
       // Set the shared message queue if available
       if (this.messageQueue && agent.setMessageQueue) {
         agent.setMessageQueue(this.messageQueue);
+      }
+      
+      // Set the task manager if available
+      if (this.taskManager && agent.setTaskManager) {
+        agent.setTaskManager(this.taskManager);
       }
       
       // Create agent info record
@@ -200,6 +212,113 @@ class IntegratedAgentManager extends EventEmitter {
       
       this.logger.error(`[${agentInfo.id}] Error:`, error);
       this.emit('agentError', { agentKey, error });
+    });
+    
+    // Enhanced events for detailed monitoring
+    
+    // Agent thought process events
+    agent.on('thought', (thoughtData) => {
+      const thought = {
+        ...thoughtData,
+        agentId: agentInfo.id,
+        projectId: agentInfo.projectId,
+        timestamp: thoughtData.timestamp || new Date().toISOString()
+      };
+      
+      // Store recent thoughts (keep last 500)
+      if (!agentInfo.thoughts) {
+        agentInfo.thoughts = [];
+      }
+      agentInfo.thoughts.push(thought);
+      if (agentInfo.thoughts.length > 500) {
+        agentInfo.thoughts.shift();
+      }
+      
+      this.emit('agentThought', thought);
+    });
+    
+    // Agent decision events
+    agent.on('decision', (decisionData) => {
+      const decision = {
+        ...decisionData,
+        agentId: agentInfo.id,
+        projectId: agentInfo.projectId,
+        timestamp: new Date().toISOString()
+      };
+      
+      this.emit('agentDecision', decision);
+    });
+    
+    // Agent planning events
+    agent.on('planning', (planData) => {
+      const plan = {
+        ...planData,
+        agentId: agentInfo.id,
+        projectId: agentInfo.projectId,
+        timestamp: new Date().toISOString()
+      };
+      
+      this.emit('agentPlanning', plan);
+    });
+    
+    // File operation events
+    agent.on('fileOperation', (operation) => {
+      const fileOp = {
+        ...operation,
+        agentId: agentInfo.id,
+        projectId: agentInfo.projectId,
+        timestamp: new Date().toISOString()
+      };
+      
+      this.emit('agentFileOperation', fileOp);
+    });
+    
+    // Task state changes
+    agent.on('taskStateChange', (taskData) => {
+      const stateChange = {
+        ...taskData,
+        agentId: agentInfo.id,
+        projectId: agentInfo.projectId,
+        timestamp: new Date().toISOString()
+      };
+      
+      this.emit('taskStateChange', stateChange);
+    });
+    
+    // Inter-agent message events
+    agent.on('messageSent', (msgData) => {
+      const message = {
+        ...msgData,
+        from: agentInfo.id,
+        projectId: agentInfo.projectId,
+        timestamp: new Date().toISOString()
+      };
+      
+      this.emit('interAgentMessage', message);
+    });
+    
+    // Test execution events (for Tester agent)
+    agent.on('testExecution', (testData) => {
+      const test = {
+        ...testData,
+        agentId: agentInfo.id,
+        projectId: agentInfo.projectId,
+        timestamp: new Date().toISOString()
+      };
+      
+      this.emit('testExecution', test);
+    });
+    
+    // Code review events (for Reviewer agent)
+    agent.on('codeReview', (reviewData) => {
+      const review = {
+        ...reviewData,
+        agentId: agentInfo.id,
+        projectId: agentInfo.projectId,
+        timestamp: new Date().toISOString()
+      };
+      
+      this.emit('codeReview', review);
     });
   }
   

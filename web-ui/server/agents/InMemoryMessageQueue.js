@@ -22,6 +22,69 @@ class InMemoryMessageQueue extends EventEmitter {
       totalMessagesDelivered: 0,
       totalMessagesDropped: 0
     };
+    
+    // Message flow tracking for visualization
+    this.messageFlows = []; // Keep last 1000 flows
+    this.flowStats = new Map(); // agent-pair -> stats
+    this.maxFlowsSize = 1000;
+    
+    // Agent activity tracking
+    this.agentActivity = new Map(); // agent -> { sent, received, lastActive }
+    
+    // Task manager reference for task status updates
+    this.taskManager = null;
+  }
+  
+  /**
+   * Set the task manager for task status updates
+   */
+  setTaskManager(taskManager) {
+    this.taskManager = taskManager;
+  }
+  
+  /**
+   * Handle task status updates from agent messages
+   */
+  handleTaskStatusUpdate(message) {
+    if (!this.taskManager || !message.content) {
+      return;
+    }
+    
+    const content = message.content;
+    const from = message.from;
+    
+    // Handle task completion messages
+    if (content.type === 'TASK_COMPLETED' && content.taskId) {
+      console.log(`[MessageQueue] Task ${content.taskId} completed by ${from}`);
+      this.taskManager.updateTaskStatus(content.taskId, 'completed', {
+        completedBy: from,
+        result: content.result
+      }).catch(error => {
+        console.error(`Failed to update task status to completed: ${error.message}`);
+      });
+    }
+    
+    // Handle task failure messages  
+    if (content.type === 'TASK_FAILED' && content.taskId) {
+      console.log(`[MessageQueue] Task ${content.taskId} failed by ${from}`);
+      this.taskManager.updateTaskStatus(content.taskId, 'failed', {
+        failedBy: from,
+        error: content.error
+      }).catch(error => {
+        console.error(`Failed to update task status to failed: ${error.message}`);
+      });
+    }
+    
+    // Handle task progress messages
+    if (content.type === 'TASK_PROGRESS' && content.taskId) {
+      console.log(`[MessageQueue] Task ${content.taskId} progress update from ${from}`);
+      // TaskManager doesn't have a progress method yet, but we can emit an event
+      this.emit('task:progress', {
+        taskId: content.taskId,
+        progress: content.progress,
+        from: from
+      });
+    }
   }
   
   /**
@@ -90,6 +153,13 @@ class InMemoryMessageQueue extends EventEmitter {
     // Update stats
     this.stats.totalMessagesSent++;
     
+    // Track message flow
+    this.trackMessageFlow(messageData);
+    
+    // Update agent activity
+    this.updateAgentActivity(messageData.from, 'sent');
+    this.updateAgentActivity(recipient, 'received');
+    
     // Check if recipient is registered
     if (!this.queues.has(recipient)) {
       this.registerAgent(recipient);
@@ -97,12 +167,8 @@ class InMemoryMessageQueue extends EventEmitter {
     
     const queue = this.queues.get(recipient);
     
-    // Add message to queue
-    if (options.priority === 'high') {
-      queue.messages.unshift(messageData);
-    } else {
-      queue.messages.push(messageData);
-    }
+    // Add message to queue with priority handling
+    this.insertWithPriority(queue, messageData);
     
     queue.stats.received++;
     
@@ -117,7 +183,58 @@ class InMemoryMessageQueue extends EventEmitter {
       type: messageData.type
     });
     
+    // Emit flow update event for real-time visualization
+    this.emit('flow:update', {
+      from: messageData.from,
+      to: recipient,
+      type: messageData.type,
+      priority: messageData.priority,
+      timestamp: messageData.timestamp
+    });
+    
     return messageId;
+  }
+  
+  /**
+   * Insert message into queue based on priority
+   * Priority levels: critical > high > normal > low
+   */
+  insertWithPriority(queue, messageData) {
+    const priorityScore = {
+      'critical': 4,
+      'high': 3,
+      'normal': 2,
+      'low': 1
+    };
+    
+    const messageScore = priorityScore[messageData.priority] || 2;
+    
+    // Find the correct position to insert based on priority
+    let insertIndex = queue.messages.length;
+    for (let i = 0; i < queue.messages.length; i++) {
+      const existingScore = priorityScore[queue.messages[i].priority] || 2;
+      if (messageScore > existingScore) {
+        insertIndex = i;
+        break;
+      }
+    }
+    
+    // Insert at the calculated position
+    queue.messages.splice(insertIndex, 0, messageData);
+  }
+  
+  /**
+   * Send a priority message (convenience method)
+   */
+  sendPriority(recipient, message, priority = 'high') {
+    return this.send(recipient, message, { priority });
+  }
+  
+  /**
+   * Send a critical message (highest priority)
+   */
+  sendCritical(recipient, message) {
+    return this.send(recipient, message, { priority: 'critical' });
   }
   
   /**
@@ -249,6 +366,9 @@ class InMemoryMessageQueue extends EventEmitter {
             to: agentName,
             listenerCount: deliveredCount
           });
+          
+          // Update TaskManager if this is a task status message
+          this.handleTaskStatusUpdate(message);
         }
       }
     });
@@ -384,6 +504,181 @@ class InMemoryMessageQueue extends EventEmitter {
   }
   
   /**
+   * Track message flow between agents
+   */
+  trackMessageFlow(messageData) {
+    // Add to flows array
+    this.messageFlows.push({
+      from: messageData.from,
+      to: messageData.to,
+      type: messageData.type,
+      priority: messageData.priority,
+      timestamp: messageData.timestamp,
+      size: JSON.stringify(messageData.content).length
+    });
+    
+    // Trim flows if too large
+    if (this.messageFlows.length > this.maxFlowsSize) {
+      this.messageFlows.shift();
+    }
+    
+    // Update flow statistics
+    const flowKey = `${messageData.from}->${messageData.to}`;
+    const stats = this.flowStats.get(flowKey) || {
+      count: 0,
+      totalSize: 0,
+      types: new Map(),
+      priorities: new Map(),
+      firstMessage: messageData.timestamp,
+      lastMessage: messageData.timestamp
+    };
+    
+    stats.count++;
+    stats.totalSize += JSON.stringify(messageData.content).length;
+    stats.lastMessage = messageData.timestamp;
+    
+    // Track message types
+    const typeCount = stats.types.get(messageData.type) || 0;
+    stats.types.set(messageData.type, typeCount + 1);
+    
+    // Track priorities
+    const priorityCount = stats.priorities.get(messageData.priority) || 0;
+    stats.priorities.set(messageData.priority, priorityCount + 1);
+    
+    this.flowStats.set(flowKey, stats);
+  }
+  
+  /**
+   * Update agent activity statistics
+   */
+  updateAgentActivity(agentName, action) {
+    const activity = this.agentActivity.get(agentName) || {
+      sent: 0,
+      received: 0,
+      lastActive: null,
+      status: 'idle'
+    };
+    
+    if (action === 'sent') {
+      activity.sent++;
+    } else if (action === 'received') {
+      activity.received++;
+    }
+    
+    activity.lastActive = new Date().toISOString();
+    activity.status = 'active';
+    
+    this.agentActivity.set(agentName, activity);
+    
+    // Set status back to idle after 30 seconds of no activity
+    setTimeout(() => {
+      const currentActivity = this.agentActivity.get(agentName);
+      if (currentActivity && currentActivity.lastActive === activity.lastActive) {
+        currentActivity.status = 'idle';
+        this.agentActivity.set(agentName, currentActivity);
+        this.emit('agent:idle', { agentName });
+      }
+    }, 30000);
+  }
+  
+  /**
+   * Get message flow data for visualization
+   */
+  getFlowData() {
+    // Prepare nodes from agent activity
+    const nodes = [];
+    for (const [agentName, activity] of this.agentActivity) {
+      nodes.push({
+        id: agentName,
+        label: agentName,
+        status: activity.status,
+        sent: activity.sent,
+        received: activity.received,
+        lastActive: activity.lastActive
+      });
+    }
+    
+    // Prepare edges from flow stats
+    const edges = [];
+    for (const [flowKey, stats] of this.flowStats) {
+      const [source, target] = flowKey.split('->');
+      edges.push({
+        source,
+        target,
+        count: stats.count,
+        totalSize: stats.totalSize,
+        types: Array.from(stats.types.entries()),
+        priorities: Array.from(stats.priorities.entries()),
+        averageSize: Math.round(stats.totalSize / stats.count),
+        lastMessage: stats.lastMessage
+      });
+    }
+    
+    // Recent flows for animation
+    const recentFlows = this.messageFlows.slice(-50).map(flow => ({
+      from: flow.from,
+      to: flow.to,
+      type: flow.type,
+      priority: flow.priority,
+      timestamp: flow.timestamp
+    }));
+    
+    return {
+      nodes,
+      edges,
+      recentFlows,
+      stats: {
+        totalMessages: this.stats.totalMessagesSent,
+        totalDelivered: this.stats.totalMessagesDelivered,
+        activeAgents: nodes.filter(n => n.status === 'active').length
+      }
+    };
+  }
+  
+  /**
+   * Get flow statistics for a specific time range
+   */
+  getFlowStatsByTime(since) {
+    const sinceTime = new Date(since).toISOString();
+    const filteredFlows = this.messageFlows.filter(f => f.timestamp >= sinceTime);
+    
+    const stats = {
+      messageCount: filteredFlows.length,
+      byType: {},
+      byPriority: {},
+      byAgentPair: {},
+      totalSize: 0
+    };
+    
+    filteredFlows.forEach(flow => {
+      // By type
+      stats.byType[flow.type] = (stats.byType[flow.type] || 0) + 1;
+      
+      // By priority
+      stats.byPriority[flow.priority] = (stats.byPriority[flow.priority] || 0) + 1;
+      
+      // By agent pair
+      const pairKey = `${flow.from}->${flow.to}`;
+      stats.byAgentPair[pairKey] = (stats.byAgentPair[pairKey] || 0) + 1;
+      
+      // Total size
+      stats.totalSize += flow.size;
+    });
+    
+    return stats;
+  }
+  
+  /**
+   * Clear flow data
+   */
+  clearFlowData() {
+    this.messageFlows = [];
+    this.flowStats.clear();
+    this.agentActivity.clear();
+    this.emit('flow:cleared');
+  }
+  
+  /**
    * Reset the message queue
    */
   reset() {
@@ -394,6 +689,7 @@ class InMemoryMessageQueue extends EventEmitter {
       totalMessagesDelivered: 0,
       totalMessagesDropped: 0
     };
+    this.clearFlowData();
     
     this.emit('reset');
   }

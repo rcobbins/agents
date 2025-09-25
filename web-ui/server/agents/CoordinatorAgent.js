@@ -246,6 +246,40 @@ Format the response as a JSON array of task objects.`;
    * Get tasks that are ready to be executed (dependencies met)
    */
   getAvailableTasks() {
+    // First check TaskManager if available
+    if (this.useTaskManager && this.taskManager) {
+      const tasks = this.taskManager.getProjectTasks(this.projectId);
+      
+      if (tasks.length > 0) {
+        this.log(`Found ${tasks.length} tasks in TaskManager for project ${this.projectId}`);
+        
+        // Convert TaskManager tasks to internal format
+        const availableTasks = tasks.filter(task => {
+          const isAvailable = ['pending', 'planning'].includes(task.status);
+          const noDeps = !task.dependencies || task.dependencies.length === 0 || 
+            task.dependencies.every(depId => {
+              const dep = tasks.find(t => t.id === depId);
+              return dep && dep.status === 'completed';
+            });
+          return isAvailable && noDeps;
+        }).map(task => ({
+          id: task.id,
+          description: task.description || task.title,
+          assignedAgent: this.mapTaskToAgent(task),
+          priority: task.priority,
+          dependencies: task.dependencies,
+          status: 'pending',
+          fromTaskManager: true  // Flag to track source
+        }));
+        
+        if (availableTasks.length > 0) {
+          this.log(`${availableTasks.length} TaskManager tasks ready for distribution`);
+          return availableTasks;
+        }
+      }
+    }
+    
+    // Fallback to file-based task queue
     const MAX_RETRY_ATTEMPTS = 5;
     
     // Log current task queue state
@@ -293,12 +327,67 @@ Format the response as a JSON array of task objects.`;
   }
   
   /**
+   * Map task to appropriate agent based on content
+   */
+  mapTaskToAgent(task) {
+    const taskText = ((task.title || '') + ' ' + (task.description || '')).toLowerCase();
+    
+    if (taskText.includes('plan') || taskText.includes('design') || 
+        taskText.includes('architect') || taskText.includes('structure')) {
+      return 'planner';
+    }
+    if (taskText.includes('test') || taskText.includes('coverage') || 
+        taskText.includes('spec') || taskText.includes('validate')) {
+      return 'tester';
+    }
+    if (taskText.includes('review') || taskText.includes('refactor') || 
+        taskText.includes('optimize') || taskText.includes('improve')) {
+      return 'reviewer';
+    }
+    
+    // Default to coder for implementation tasks
+    return 'coder';
+  }
+  
+  /**
    * Assign task to specific agent
    */
   async assignTaskToAgent(task, agentName) {
     await this.log(`Assigning task ${task.id} to ${agentName}`);
     
-    // Update task status (reset from failed if retrying)
+    // Handle TaskManager tasks differently
+    if (task.fromTaskManager && this.useTaskManager && this.taskManager) {
+      try {
+        // Update via TaskManager
+        await this.taskManager.assignTask(task.id, agentName);
+        await this.taskManager.updateTaskStatus(task.id, 'in_progress');
+        
+        await this.log(`Updated TaskManager: task ${task.id} assigned to ${agentName}`);
+      } catch (error) {
+        await this.logError(`Failed to update TaskManager: ${error.message}`);
+      }
+      
+      // Update local agent status
+      this.agentStatus[agentName].status = 'busy';
+      this.agentStatus[agentName].currentTask = task.id;
+      await this.saveAgentStatus();
+      
+      // Send message to agent
+      const message = {
+        type: 'EXECUTE_TASK',
+        task: task,
+        context: {
+          projectSpec: this.projectSpec,
+          projectVision: this.projectVision,
+          goals: this.goals
+        }
+      };
+      
+      await this.sendMessage(agentName, message, task.priority);
+      return;
+    }
+    
+    // Original file-based logic
     const wasFailedTask = task.status === 'failed';
     task.status = 'in_progress';
     task.assignedAt = new Date().toISOString();

@@ -86,6 +86,40 @@ class BaseAgent extends EventEmitter {
   }
   
   /**
+   * Set the task manager for integrated mode
+   */
+  setTaskManager(taskManager) {
+    this.taskManager = taskManager;
+    this.useTaskManager = true;
+    
+    // Extract projectId from projectDir
+    const pathParts = this.projectDir.split('/');
+    this.projectId = pathParts[pathParts.length - 1] || 'unknown';
+    
+    // Subscribe to TaskManager events if this is the coordinator
+    if (this.agentName === 'coordinator' && taskManager) {
+      taskManager.on('task:created', (task) => {
+        if (task.projectId === this.projectId) {
+          this.onExternalTaskCreated(task);
+        }
+      });
+      
+      this.log('Connected to TaskManager for project ' + this.projectId);
+    }
+  }
+  
+  /**
+   * Handle external task creation from TaskManager
+   */
+  onExternalTaskCreated(task) {
+    this.log(`New task created in TaskManager: ${task.id} - ${task.title}`);
+    // Trigger task distribution for coordinator
+    if (this.agentName === 'coordinator' && typeof this.distributeTasks === 'function') {
+      setTimeout(() => this.distributeTasks(), 100);
+    }
+  }
+  
+  /**
    * Handle incoming messages in integrated mode
    */
   handleIncomingMessage(message) {
@@ -176,6 +210,14 @@ class BaseAgent extends EventEmitter {
    */
   async askClaude(prompt, context = '') {
     try {
+      // Emit thought event for Claude query
+      this.emit('thought', {
+        type: 'claude_query',
+        phase: 'preparing',
+        prompt: prompt.substring(0, 500), // Truncate for UI display
+        timestamp: new Date().toISOString()
+      });
+      
       // Limit context size to prevent command-line issues
       const MAX_CONTEXT_LENGTH = 5000;
       
@@ -219,14 +261,51 @@ ${instructionsSummary}
         this.log(`Context truncated from ${projectContext.length} to ${MAX_CONTEXT_LENGTH} chars`);
       }
       
+      // Emit thought with full prompt before sending
+      this.emit('thought', {
+        type: 'claude_query',
+        phase: 'sending',
+        prompt: prompt,
+        contextLength: projectContext.length,
+        timestamp: new Date().toISOString()
+      });
+      
       const response = await this.claude.ask(prompt, {
         projectContext: projectContext,
-        outputFormat: 'text'
+        outputFormat: 'text',
+        onStreamChunk: (chunk) => {
+          // Emit streaming stdout/stderr chunks from Claude
+          this.emit('thought', {
+            type: 'claude_stream',
+            phase: 'streaming',
+            streamType: chunk.type,
+            content: chunk.content,
+            timestamp: chunk.timestamp
+          });
+        }
+      });
+      
+      // Emit thought with response
+      this.emit('thought', {
+        type: 'claude_response',
+        phase: 'received',
+        response: response.substring(0, 1000), // Truncate for UI
+        responseLength: response.length,
+        timestamp: new Date().toISOString()
       });
       
       return response;
     } catch (error) {
       this.logError(`Failed to ask Claude: ${error.message}`);
+      
+      // Emit error thought
+      this.emit('thought', {
+        type: 'claude_error',
+        phase: 'error',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+      
       throw error;
     }
   }
@@ -375,6 +454,16 @@ ${instructionsSummary}
         type: 'task',
         timestamp: new Date().toISOString()
       };
+      
+      // Emit inter-agent message event
+      this.emit('messageSent', {
+        to: recipient,
+        type: messageData.type,
+        priority: priority,
+        contentPreview: typeof message === 'string' ? 
+          message.substring(0, 200) : 
+          JSON.stringify(message).substring(0, 200)
+      });
       
       let messageId;
       
@@ -713,6 +802,129 @@ ${instructionsSummary}
     });
     process.on('unhandledRejection', (reason, promise) => {
       this.logError(`Unhandled rejection at: ${promise}, reason: ${reason}`);
+    });
+  }
+  
+  /**
+   * Enhanced event emitters for detailed monitoring
+   */
+  
+  // Emit planning event when agent is creating a plan
+  emitPlanning(planData) {
+    this.emit('planning', {
+      type: 'plan',
+      ...planData,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Also emit as thought for stream of consciousness
+    this.emit('thought', {
+      type: 'planning',
+      phase: 'planning',
+      plan: planData,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Emit decision event when agent makes a decision
+  emitDecision(decisionData) {
+    this.emit('decision', {
+      type: 'decision',
+      ...decisionData,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Also emit as thought
+    this.emit('thought', {
+      type: 'decision',
+      phase: 'deciding',
+      decision: decisionData,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Emit file operation event
+  async emitFileOperation(operation, filePath, details = {}) {
+    this.emit('fileOperation', {
+      operation,
+      filePath,
+      ...details,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Emit task state change
+  emitTaskStateChange(taskId, oldState, newState, details = {}) {
+    this.emit('taskStateChange', {
+      taskId,
+      oldState,
+      newState,
+      ...details,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Wrapped file operations with event emission and change tracking
+  async writeFile(filePath, content) {
+    // Check if file exists to determine operation type
+    const fileExists = await fs.access(filePath).then(() => true).catch(() => false);
+    const operation = fileExists ? 'modify' : 'create';
+    
+    // Track change if changeTracker is available
+    let changeId = null;
+    if (this.changeTracker) {
+      const change = await this.changeTracker.trackChange(
+        this.agentName || this.agentId,
+        filePath,
+        operation,
+        this.currentTaskId
+      );
+      changeId = change.id;
+    }
+    
+    await this.emitFileOperation('write', filePath, { 
+      size: content.length,
+      type: 'file',
+      operation,
+      changeId
+    });
+    
+    // Write the file
+    await fs.writeFile(filePath, content);
+    
+    // Complete the change tracking
+    if (changeId && this.changeTracker) {
+      await this.changeTracker.completeChange(changeId, content);
+    }
+    
+    return { success: true, changeId };
+  }
+  
+  async readFile(filePath, encoding = 'utf8') {
+    await this.emitFileOperation('read', filePath, {
+      type: 'file'
+    });
+    
+    return fs.readFile(filePath, encoding);
+  }
+  
+  // Emit analysis thought
+  emitAnalysis(analysisData) {
+    this.emit('thought', {
+      type: 'analysis',
+      phase: 'analyzing',
+      ...analysisData,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Emit progress thought
+  emitProgress(progressData) {
+    this.emit('thought', {
+      type: 'progress',
+      phase: 'working',
+      ...progressData,
+      timestamp: new Date().toISOString()
     });
   }
 }

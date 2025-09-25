@@ -15,6 +15,11 @@ const InMemoryMessageQueue = require('./agents/InMemoryMessageQueue');
 const MessageBroker = require('./modules/MessageBroker');
 const FileWatcher = require('./modules/FileWatcher');
 const Logger = require('./modules/Logger');
+const TaskManager = require('./modules/TaskManager');
+const ChangeTracker = require('./modules/ChangeTracker');
+const TestRunner = require('./modules/TestRunner');
+const MetricsCollector = require('./modules/MetricsCollector');
+const GoalProcessor = require('./modules/GoalProcessor');
 
 // Import routes
 const projectRoutes = require('./routes/projects');
@@ -22,6 +27,11 @@ const agentRoutes = require('./routes/agents');
 const messageRoutes = require('./routes/messages');
 const statusRoutes = require('./routes/status');
 const assistantRoutes = require('./routes/assistant');
+const taskRoutes = require('./routes/tasks');
+const flowsRoutes = require('./routes/flows');
+const changesRoutes = require('./routes/changes');
+const testsRoutes = require('./routes/tests');
+const analyticsRoutes = require('./routes/analytics');
 
 // Initialize express app
 const app = express();
@@ -84,8 +94,173 @@ agentLauncher.on('agentStatus', (data) => {
   });
 });
 
+// Process goals when coordinator starts
+agentLauncher.on('agentStarted', async ({ agentKey, agentType, projectId }) => {
+  if (agentType === 'coordinator') {
+    logger.info(`Coordinator started for project ${projectId}, processing goals...`);
+    
+    // Get project from projectManager
+    const project = projectManager.projects.get(projectId);
+    if (project) {
+      const goalsPath = path.join(
+        project.path.replace('~', process.env.HOME),
+        '.agents/docs/GOALS.json'
+      );
+      
+      try {
+        // Check if goals file exists
+        await fs.promises.access(goalsPath);
+        
+        // Process goals into tasks
+        const tasks = await goalProcessor.processProjectGoals(projectId, goalsPath);
+        logger.info(`Created ${tasks.length} tasks from goals for project ${projectId}`);
+        
+        // Notify coordinator about new tasks
+        if (tasks.length > 0) {
+          const agentInfo = agentLauncher.agents.get(agentKey);
+          if (agentInfo && agentInfo.agent) {
+            // Trigger task distribution
+            setTimeout(() => {
+              if (typeof agentInfo.agent.distributeTasks === 'function') {
+                agentInfo.agent.distributeTasks();
+              }
+            }, 1000);
+          }
+        }
+      } catch (error) {
+        logger.error(`Failed to process goals for project ${projectId}: ${error.message}`);
+      }
+    }
+  }
+});
+
+// Forward enhanced agent events to WebSocket clients
+agentLauncher.on('agentThought', (data) => {
+  io.to(`project:${data.projectId}`).emit('agent:thought', data);
+});
+
+agentLauncher.on('agentDecision', (data) => {
+  io.to(`project:${data.projectId}`).emit('agent:decision', data);
+});
+
+agentLauncher.on('agentPlanning', (data) => {
+  io.to(`project:${data.projectId}`).emit('agent:planning', data);
+});
+
+agentLauncher.on('agentFileOperation', (data) => {
+  io.to(`project:${data.projectId}`).emit('agent:fileOperation', data);
+});
+
+agentLauncher.on('taskStateChange', (data) => {
+  io.to(`project:${data.projectId}`).emit('task:stateChange', data);
+});
+
+agentLauncher.on('interAgentMessage', (data) => {
+  io.to(`project:${data.projectId}`).emit('agent:message', data);
+});
+
+agentLauncher.on('testExecution', (data) => {
+  io.to(`project:${data.projectId}`).emit('test:execution', data);
+});
+
+agentLauncher.on('codeReview', (data) => {
+  io.to(`project:${data.projectId}`).emit('code:review', data);
+});
+
 const messageBroker = new MessageBroker(logger);
 const fileWatcher = new FileWatcher(logger);
+const taskManager = new TaskManager(logger);
+const changeTracker = new ChangeTracker(logger);
+const testRunner = new TestRunner(logger);
+const metricsCollector = new MetricsCollector(logger, {
+  agentManager: agentLauncher,
+  taskManager,
+  testRunner,
+  changeTracker,
+  messageQueue,
+  autoStart: true
+});
+
+// Create goal processor
+const goalProcessor = new GoalProcessor(taskManager, logger);
+
+// Connect TaskManager to agents and message queue (must be after taskManager is created)
+agentLauncher.setTaskManager(taskManager);
+messageQueue.setTaskManager(taskManager);
+
+// Forward task events to WebSocket clients
+taskManager.on('task:created', (task) => {
+  io.to(`project:${task.projectId}`).emit('task:created', task);
+});
+
+taskManager.on('task:statusChanged', (data) => {
+  io.to(`project:${data.task.projectId}`).emit('task:statusChanged', data);
+});
+
+taskManager.on('task:assigned', (data) => {
+  io.to(`project:${data.task.projectId}`).emit('task:assigned', data);
+});
+
+taskManager.on('task:blocked', (data) => {
+  io.to(`project:${data.task.projectId}`).emit('task:blocked', data);
+});
+
+taskManager.on('task:unblocked', (data) => {
+  io.to(`project:${data.task.projectId}`).emit('task:unblocked', data);
+});
+
+// Forward message flow events to WebSocket clients
+messageQueue.on('flow:update', (data) => {
+  // Broadcast to all clients (flows are global, not project-specific)
+  io.emit('flow:update', data);
+});
+
+messageQueue.on('agent:idle', (data) => {
+  io.emit('agent:activity', { ...data, status: 'idle' });
+});
+
+// Forward change tracker events to WebSocket clients
+changeTracker.on('change:tracked', (change) => {
+  io.emit('change:tracked', change);
+});
+
+changeTracker.on('change:completed', (change) => {
+  io.emit('change:completed', change);
+});
+
+changeTracker.on('change:reverted', (change) => {
+  io.emit('change:reverted', change);
+});
+
+changeTracker.on('change:failed', (change) => {
+  io.emit('change:failed', change);
+});
+
+// Forward test runner events to WebSocket clients
+testRunner.on('test:started', (testRun) => {
+  io.emit('test:started', testRun);
+});
+
+testRunner.on('test:completed', (testRun) => {
+  io.emit('test:completed', testRun);
+});
+
+testRunner.on('test:error', (data) => {
+  io.emit('test:error', data);
+});
+
+testRunner.on('test:output', (data) => {
+  io.emit('test:output', data);
+});
+
+// Forward metrics collector events to WebSocket clients
+metricsCollector.on('metrics:snapshot', (snapshot) => {
+  io.emit('metrics:snapshot', snapshot);
+});
+
+metricsCollector.on('insight:generated', (insight) => {
+  io.emit('insight:generated', insight);
+});
 
 // Make managers available to routes
 app.locals.projectManager = projectManager;
@@ -93,6 +268,10 @@ app.locals.agentManager = agentLauncher; // Keep the same name for compatibility
 app.locals.agentLauncher = agentLauncher;
 app.locals.messageBroker = messageBroker;
 app.locals.messageQueue = messageQueue; // Expose the in-memory queue
+app.locals.taskManager = taskManager;
+app.locals.changeTracker = changeTracker;
+app.locals.testRunner = testRunner;
+app.locals.metricsCollector = metricsCollector;
 app.locals.io = io;
 
 // Root route
@@ -120,6 +299,11 @@ app.use('/api/agents', agentRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/status', statusRoutes);
 app.use('/api/assistant', assistantRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/flows', flowsRoutes);
+app.use('/api/changes', changesRoutes);
+app.use('/api/tests', testsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

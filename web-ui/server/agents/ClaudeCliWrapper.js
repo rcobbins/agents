@@ -142,7 +142,8 @@ Provide constructive feedback that improves code quality.`
         outputFormat = 'text',
         projectContext = '',
         timeout = 300000, // 5 minutes for large prompts
-        retryOnError = true
+        retryOnError = true,
+        onStreamChunk = null // Callback for streaming stdout chunks
       } = options;
       
       // Get session info
@@ -191,13 +192,33 @@ Provide constructive feedback that improves code quality.`
             let stdout = '';
             let stderr = '';
             
-            // Collect output
+            // Collect output and stream if callback provided
             child.stdout.on('data', (data) => {
-              stdout += data.toString();
+              const chunk = data.toString();
+              stdout += chunk;
+              
+              // Stream the chunk in real-time if callback provided
+              if (onStreamChunk) {
+                onStreamChunk({
+                  type: 'stdout',
+                  content: chunk,
+                  timestamp: new Date().toISOString()
+                });
+              }
             });
             
             child.stderr.on('data', (data) => {
-              stderr += data.toString();
+              const chunk = data.toString();
+              stderr += chunk;
+              
+              // Stream stderr too for complete visibility
+              if (onStreamChunk) {
+                onStreamChunk({
+                  type: 'stderr',
+                  content: chunk,
+                  timestamp: new Date().toISOString()
+                });
+              }
             });
             
             // Handle completion

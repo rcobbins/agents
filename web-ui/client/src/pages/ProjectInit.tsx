@@ -40,7 +40,6 @@ import TestingStrategyGuide from '../components/project-init/TestingStrategyGuid
 import ArchitectureHelper from '../components/project-init/ArchitectureHelper';
 import ComplexityEstimator from '../components/project-init/ComplexityEstimator';
 import ReviewWithValidation from '../components/project-init/ReviewWithValidation';
-import ProjectAssistantPanel from '../components/project-init/ProjectAssistantPanel';
 import ProjectVisionWizard from '../components/project-init/ProjectVisionWizard';
 import RequirementsWizard from '../components/project-init/RequirementsWizard';
 
@@ -72,7 +71,6 @@ function ProjectInit() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<'guided' | 'expert'>('guided');
   const [activeStep, setActiveStep] = useState(0);
-  const [showAssistant, setShowAssistant] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [experience, setExperience] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
   
@@ -617,15 +615,6 @@ function ProjectInit() {
                 justifyContent: { xs: 'space-between', sm: 'flex-end' },
                 width: { xs: '100%', sm: 'auto' }
               }}>
-                <Tooltip title="Toggle AI Assistant">
-                  <IconButton
-                    onClick={() => setShowAssistant(!showAssistant)}
-                    color={showAssistant ? 'primary' : 'default'}
-                  >
-                    <HelpOutline />
-                  </IconButton>
-                </Tooltip>
-
                 {activeStep === steps.length - 1 ? (
                   <Button
                     variant="contained"
@@ -653,14 +642,6 @@ function ProjectInit() {
             </Box>
           </Box>
 
-          {/* AI Assistant Panel - Floating */}
-          {showAssistant && (
-            <ProjectAssistantPanel
-              projectType={projectConfig.type}
-              techStack={projectConfig.techStack}
-              currentStep={steps[activeStep].label}
-            />
-          )}
         </Box>
       </Box>
     </Box>

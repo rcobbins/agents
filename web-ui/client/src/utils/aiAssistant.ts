@@ -2,6 +2,7 @@ import { SmartSuggestionEngine } from './suggestions';
 import { ProjectValidator } from './projectValidation';
 import { PROJECT_TEMPLATES } from '../data/projectTemplates';
 import { TECH_STACK_PRESETS } from '../data/techStackData';
+import { PageContext } from './pageContextAnalyzer';
 
 export interface AssistantMessage {
   role: 'user' | 'assistant';
@@ -15,6 +16,9 @@ export interface AssistantContext {
   techStack: string[];
   currentStep: string;
   experience: 'beginner' | 'intermediate' | 'advanced';
+  currentPage?: string;
+  pageType?: string;
+  projectId?: string | null;
 }
 
 export class ProjectAssistant {
@@ -37,7 +41,7 @@ export class ProjectAssistant {
   /**
    * Process user message and generate response
    */
-  async processMessage(message: string): Promise<AssistantMessage> {
+  async processMessage(message: string, pageContext?: PageContext): Promise<AssistantMessage> {
     const userMessage: AssistantMessage = {
       role: 'user',
       content: message,
@@ -47,7 +51,7 @@ export class ProjectAssistant {
 
     try {
       // Try to use the real Claude backend first
-      const response = await this.callAssistantAPI(message);
+      const response = await this.callAssistantAPI(message, pageContext);
       
       const assistantMessage: AssistantMessage = {
         role: 'assistant',
@@ -62,7 +66,7 @@ export class ProjectAssistant {
       console.warn('Failed to call assistant API, using fallback:', error);
       
       // Fall back to local generation
-      const response = await this.generateResponse(message);
+      const response = await this.generateResponse(message, pageContext);
       
       const assistantMessage: AssistantMessage = {
         role: 'assistant',
@@ -78,7 +82,7 @@ export class ProjectAssistant {
   /**
    * Call the backend assistant API
    */
-  private async callAssistantAPI(message: string): Promise<{
+  private async callAssistantAPI(message: string, pageContext?: PageContext): Promise<{
     content: string;
     suggestions?: any[];
   }> {
@@ -89,7 +93,8 @@ export class ProjectAssistant {
       },
       body: JSON.stringify({
         message,
-        context: this.context
+        context: this.context,
+        pageContext
       })
     });
 
@@ -100,7 +105,7 @@ export class ProjectAssistant {
     const data = await response.json();
     
     // Extract suggestions from the response if present
-    const suggestions = this.extractSuggestionsFromResponse(data.content);
+    const suggestions = this.extractSuggestionsFromResponse(data.content, pageContext);
     
     return {
       content: data.content,
@@ -111,18 +116,51 @@ export class ProjectAssistant {
   /**
    * Extract suggestions from AI response
    */
-  private extractSuggestionsFromResponse(content: string): any[] {
+  private extractSuggestionsFromResponse(content: string, pageContext?: PageContext): any[] {
     const suggestions: any[] = [];
     
-    // Look for common suggestion patterns in the response
-    if (content.toLowerCase().includes('template')) {
-      suggestions.push({ label: 'View templates', action: 'show_templates' });
-    }
-    if (content.toLowerCase().includes('tech') || content.toLowerCase().includes('stack')) {
-      suggestions.push({ label: 'Explore tech stack', action: 'tech_stack' });
-    }
-    if (content.toLowerCase().includes('test')) {
-      suggestions.push({ label: 'Configure testing', action: 'testing' });
+    // Page-specific suggestions
+    if (pageContext) {
+      switch (pageContext.pageType) {
+        case 'agentMonitor':
+          if (content.toLowerCase().includes('restart') || content.toLowerCase().includes('stuck')) {
+            suggestions.push({ label: 'Restart all agents', action: 'restart_agents' });
+          }
+          if (content.toLowerCase().includes('log') || content.toLowerCase().includes('debug')) {
+            suggestions.push({ label: 'View agent logs', action: 'view_logs' });
+          }
+          break;
+
+        case 'workQueue':
+          if (content.toLowerCase().includes('priorit')) {
+            suggestions.push({ label: 'Auto-prioritize tasks', action: 'prioritize' });
+          }
+          if (content.toLowerCase().includes('block')) {
+            suggestions.push({ label: 'Show blockers', action: 'show_blockers' });
+          }
+          break;
+
+        case 'testResults':
+          if (content.toLowerCase().includes('fail') || content.toLowerCase().includes('fix')) {
+            suggestions.push({ label: 'Debug failures', action: 'debug_tests' });
+          }
+          if (content.toLowerCase().includes('coverage')) {
+            suggestions.push({ label: 'Coverage report', action: 'coverage_report' });
+          }
+          break;
+
+        default:
+          // Generic suggestions
+          if (content.toLowerCase().includes('template')) {
+            suggestions.push({ label: 'View templates', action: 'show_templates' });
+          }
+          if (content.toLowerCase().includes('tech') || content.toLowerCase().includes('stack')) {
+            suggestions.push({ label: 'Explore tech stack', action: 'tech_stack' });
+          }
+          if (content.toLowerCase().includes('test')) {
+            suggestions.push({ label: 'Configure testing', action: 'testing' });
+          }
+      }
     }
     
     return suggestions;
@@ -131,15 +169,21 @@ export class ProjectAssistant {
   /**
    * Generate response based on user input
    */
-  private async generateResponse(message: string): Promise<{
+  private async generateResponse(message: string, pageContext?: PageContext): Promise<{
     content: string;
     suggestions?: any[];
   }> {
     const lower = message.toLowerCase();
 
+    // Page-specific responses
+    if (pageContext) {
+      const pageResponse = this.getPageSpecificResponse(message, pageContext);
+      if (pageResponse) return pageResponse;
+    }
+
     // Handle common questions
     if (lower.includes('help') || lower.includes('what')) {
-      return this.getHelpResponse();
+      return this.getHelpResponse(pageContext);
     }
 
     if (lower.includes('suggest') || lower.includes('recommend')) {
@@ -169,14 +213,76 @@ export class ProjectAssistant {
 
     // Default response
     return {
-      content: "I can help you set up your project! Tell me what you're trying to build, or ask me about templates, tech stacks, or best practices."
+      content: `I'm here to help you with ${pageContext?.pageName || 'your project'}! Ask me anything about the current page, or I can help with general development questions.`
     };
+  }
+
+  /**
+   * Get page-specific response
+   */
+  private getPageSpecificResponse(message: string, pageContext: PageContext): { content: string; suggestions?: any[] } | null {
+    const lower = message.toLowerCase();
+    
+    switch (pageContext.pageType) {
+      case 'agentMonitor':
+        if (lower.includes('stuck') || lower.includes('not running')) {
+          return {
+            content: `I see you're having issues with agents. Here's what to check:\n\n1. **Agent Status**: ${pageContext.pageData.runningAgents || 0} of ${pageContext.pageData.agentCount || 0} agents are running\n2. **Common Issues**:\n   - Check if the Claude CLI is accessible\n   - Verify project configuration\n   - Look for error messages in logs\n3. **Quick Fix**: Try restarting the stuck agent or use the "Reset Agent" feature\n\nWould you like me to help debug a specific agent?`,
+            suggestions: [
+              { label: 'Check logs', action: 'view_logs' },
+              { label: 'Restart agents', action: 'restart_agents' },
+            ]
+          };
+        }
+        break;
+
+      case 'workQueue':
+        if (lower.includes('priorit') || lower.includes('order')) {
+          return {
+            content: `For task prioritization, consider:\n\n**Current Status**:\n- ${pageContext.pageData.pendingTasks || 0} pending tasks\n- ${pageContext.pageData.inProgressTasks || 0} in progress\n- ${pageContext.pageData.blockedTasks || 0} blocked\n\n**Prioritization Strategy**:\n1. Clear blockers first\n2. Focus on critical/high priority items\n3. Balance workload across agents\n4. Consider task dependencies\n\nDrag and drop tasks between columns to reorganize them.`,
+            suggestions: [
+              { label: 'Show critical tasks', action: 'filter_critical' },
+              { label: 'Clear blockers', action: 'clear_blockers' },
+            ]
+          };
+        }
+        break;
+
+      case 'testResults':
+        if (lower.includes('fail') || lower.includes('error')) {
+          const coverage = pageContext.pageData.coverage || 0;
+          return {
+            content: `Test Analysis:\n\n**Current Results**:\n- Passing: ${pageContext.pageData.passingTests || 0}\n- Failing: ${pageContext.pageData.failingTests || 0}\n- Coverage: ${coverage}%\n\n**Common failure causes**:\n- Environment differences\n- Missing dependencies\n- Timing issues in async tests\n- Incorrect mocks\n\nClick on failing tests to see detailed error messages.`,
+            suggestions: [
+              { label: 'Re-run tests', action: 'rerun_tests' },
+              { label: 'View failure details', action: 'view_failures' },
+            ]
+          };
+        }
+        break;
+
+      case 'analytics':
+        if (lower.includes('metric') || lower.includes('trend')) {
+          return {
+            content: `Here's what your metrics show:\n\n${Object.entries(pageContext.metrics || {}).slice(0, 5).map(([key, value]) => 
+              `- **${key}**: ${value}${key.includes('percent') || key.includes('coverage') ? '%' : ''}`
+            ).join('\n')}\n\n**Insights**:\n- Look for patterns in the data\n- Compare with previous periods\n- Identify bottlenecks\n- Set improvement targets`,
+            suggestions: [
+              { label: 'Export data', action: 'export_metrics' },
+              { label: 'Show trends', action: 'view_trends' },
+            ]
+          };
+        }
+        break;
+    }
+
+    return null;
   }
 
   /**
    * Get help response
    */
-  private getHelpResponse(): { content: string; suggestions?: any[] } {
+  private getHelpResponse(pageContext?: PageContext): { content: string; suggestions?: any[] } {
     const helpText = `I'm here to help you create your project! Here's what I can assist with:
 
 🎯 **Project Templates**: Choose from pre-configured templates for common project types

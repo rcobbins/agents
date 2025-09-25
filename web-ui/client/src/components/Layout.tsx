@@ -13,6 +13,8 @@ import {
   ListItemIcon,
   ListItemText,
   IconButton,
+  Chip,
+  Tooltip,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
@@ -21,7 +23,11 @@ import {
   Settings as SettingsIcon,
   Add as AddIcon,
   Menu as MenuIcon,
+  WifiTethering as ConnectedIcon,
+  WifiTetheringOff as DisconnectedIcon,
 } from '@mui/icons-material';
+import { useSocket } from '../contexts/SocketContext';
+import GlobalAssistant from './GlobalAssistant';
 
 const drawerWidth = 240;
 
@@ -32,6 +38,7 @@ interface LayoutProps {
 function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const { isConnected } = useSocket();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -91,6 +98,22 @@ function Layout({ children }: LayoutProps) {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Multi-Agent Orchestration Platform
           </Typography>
+          <Tooltip title={isConnected ? 'Connected to server' : 'Disconnected from server'}>
+            <Chip
+              icon={isConnected ? <ConnectedIcon /> : <DisconnectedIcon />}
+              label={isConnected ? 'Connected' : 'Disconnected'}
+              color={isConnected ? 'success' : 'error'}
+              size="small"
+              sx={{ 
+                animation: !isConnected ? 'pulse 2s infinite' : 'none',
+                '@keyframes pulse': {
+                  '0%': { opacity: 1 },
+                  '50%': { opacity: 0.6 },
+                  '100%': { opacity: 1 },
+                },
+              }}
+            />
+          </Tooltip>
         </Toolbar>
       </AppBar>
       <Box
@@ -139,6 +162,7 @@ function Layout({ children }: LayoutProps) {
         <Toolbar />
         {children}
       </Box>
+      <GlobalAssistant />
     </Box>
   );
 }
