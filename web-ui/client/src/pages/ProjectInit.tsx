@@ -1,5 +1,6 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSocket } from '../contexts/SocketContext';
 import {
   Box,
   Typography,
@@ -13,6 +14,8 @@ import {
   Fade,
   IconButton,
   Tooltip,
+  CircularProgress,
+  Chip,
 } from '@mui/material';
 import {
   NavigateBefore,
@@ -69,7 +72,14 @@ function ProjectInit() {
   const [mode, setMode] = useState<'guided' | 'expert'>('guided');
   const [activeStep, setActiveStep] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [taskCustomizationStatus, setTaskCustomizationStatus] = useState<{
+    status: 'idle' | 'starting' | 'completed' | 'error';
+    message: string;
+    taskCount?: number;
+    distribution?: Record<string, number>;
+  }>({ status: 'idle', message: '' });
   const [experience, setExperience] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
+  const { socket } = useSocket();
   
   // Project configuration state
   const [projectConfig, setProjectConfig] = useState<ProjectConfig>({
@@ -181,6 +191,8 @@ function ProjectInit() {
 
   const handleGenerateProject = async () => {
     setIsGenerating(true);
+    setTaskCustomizationStatus({ status: 'idle', message: 'Initializing project...' });
+    
     try {
       // Prepare the project data
       const projectData = {
@@ -191,17 +203,51 @@ function ProjectInit() {
 
       // Call the API to create the project
       const response = await api.post('/projects', projectData);
+      const projectId = response.data.id;
       
-      toast.success('Project created successfully! 🎉');
+      // Set up listener for task customization events
+      const handleTaskCustomization = (data: any) => {
+        if (data.projectId === projectId) {
+          setTaskCustomizationStatus({
+            status: data.status,
+            message: data.message,
+            taskCount: data.taskCount,
+            distribution: data.distribution,
+          });
+          
+          // Show toast notifications for key events
+          if (data.status === 'completed') {
+            toast.success(`Generated ${data.taskCount} customized tasks!`);
+            // Navigate after tasks are ready
+            setTimeout(() => {
+              navigate(`/project/${projectId}`);
+            }, 2000);
+          } else if (data.status === 'error') {
+            toast.warning('Using default tasks - customization failed');
+            // Still navigate but with warning
+            setTimeout(() => {
+              navigate(`/project/${projectId}`);
+            }, 2000);
+          }
+        }
+      };
       
-      // Navigate to the project page
-      setTimeout(() => {
-        navigate(`/project/${response.data.id}`);
-      }, 1000);
+      // Listen for task customization events
+      if (socket) {
+        socket.on('project:taskCustomization', handleTaskCustomization);
+      }
+      
+      toast.success('Project created! Customizing tasks... 🎯');
+      
+      // Clean up listener after navigation
+      return () => {
+        if (socket) {
+          socket.off('project:taskCustomization', handleTaskCustomization);
+        }
+      };
     } catch (error: any) {
       console.error('Failed to create project:', error);
       toast.error(error.response?.data?.error || 'Failed to create project');
-    } finally {
       setIsGenerating(false);
     }
   };
@@ -396,6 +442,7 @@ function ProjectInit() {
             onGenerate={handleGenerateProject}
             onSave={handleSaveAsTemplate}
             isGenerating={isGenerating}
+            taskCustomizationStatus={taskCustomizationStatus}
           />
         );
 

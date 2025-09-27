@@ -642,6 +642,18 @@ class IntegratedAgentManager extends EventEmitter {
       const agentInfo = this.agents.get(agentKey);
       
       if (agentInfo && agentInfo.status === 'running') {
+        // For coordinator, ensure tasks are synced with TaskManager
+        if (agentType === 'coordinator' && this.taskManager) {
+          const agent = agentInfo.agent;
+          if (agent && agent.taskQueue && agent.taskQueue.length > 0) {
+            // Trigger task sync if needed
+            if (agent.syncTasksWithTaskManager) {
+              await agent.syncTasksWithTaskManager();
+              this.logger.info(`Coordinator tasks synced with TaskManager`);
+            }
+          }
+        }
+        
         this.logger.info(`Agent ${agentType} is ready`);
         return true;
       }

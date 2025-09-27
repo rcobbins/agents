@@ -147,7 +147,7 @@ class ClaudeAssistant {
         try {
           const { stdout, stderr } = await execAsync(command, {
             maxBuffer: 1024 * 1024 * 10, // 10MB buffer
-            timeout: 30000, // 30 second timeout
+            timeout: 600000, // 10 minutes timeout
             env: {
               ...process.env,
               PATH: `${path.join(process.env.HOME || '/home/rob', 'bin')}:${process.env.PATH}`

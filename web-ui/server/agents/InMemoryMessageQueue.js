@@ -56,23 +56,27 @@ class InMemoryMessageQueue extends EventEmitter {
     // Handle task completion messages
     if (content.type === 'TASK_COMPLETED' && content.taskId) {
       console.log(`[MessageQueue] Task ${content.taskId} completed by ${from}`);
-      this.taskManager.updateTaskStatus(content.taskId, 'completed', {
-        completedBy: from,
-        result: content.result
-      }).catch(error => {
+      try {
+        this.taskManager.updateTaskStatus(content.taskId, 'completed', {
+          completedBy: from,
+          result: content.result
+        });
+      } catch (error) {
         console.error(`Failed to update task status to completed: ${error.message}`);
-      });
+      }
     }
     
     // Handle task failure messages  
     if (content.type === 'TASK_FAILED' && content.taskId) {
       console.log(`[MessageQueue] Task ${content.taskId} failed by ${from}`);
-      this.taskManager.updateTaskStatus(content.taskId, 'failed', {
-        failedBy: from,
-        error: content.error
-      }).catch(error => {
+      try {
+        this.taskManager.updateTaskStatus(content.taskId, 'failed', {
+          failedBy: from,
+          error: content.error
+        });
+      } catch (error) {
         console.error(`Failed to update task status to failed: ${error.message}`);
-      });
+      }
     }
     
     // Handle task progress messages

@@ -75,6 +75,17 @@ agentLauncher.setMessageQueue(messageQueue);
 // Link managers together
 projectManager.setAgentManager(agentLauncher);
 
+// Set up event emitter for ProjectManager to emit progress events
+const EventEmitter = require('events');
+const projectEventEmitter = new EventEmitter();
+projectManager.setEventEmitter(projectEventEmitter);
+
+// Forward project task customization events to WebSocket
+projectEventEmitter.on('project:taskCustomization', (data) => {
+  io.to(`project:${data.projectId}`).emit('project:taskCustomization', data);
+  logger.info(`Task customization ${data.status} for project ${data.projectId}: ${data.message}`);
+});
+
 // Forward agent events to WebSocket clients
 agentLauncher.on('agentLog', (data) => {
   // Broadcast to all clients in the project room

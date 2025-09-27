@@ -1,6 +1,9 @@
 const BaseAgent = require('./BaseAgent');
 const fs = require('fs').promises;
 const path = require('path');
+const ClaudeResponseProcessor = require('./ClaudeResponseProcessor');
+const ClaudeStructuredRequest = require('./ClaudeStructuredRequest');
+const TaskQueueMonitor = require('./TaskQueueMonitor');
 
 /**
  * CoordinatorAgent - Orchestrates work between all agents
@@ -14,6 +17,11 @@ class CoordinatorAgent extends BaseAgent {
     this.workLog = [];
     this.agentStatus = {};
     this.agents = ['planner', 'tester', 'coder', 'reviewer'];
+    
+    // Structured communication components
+    this.responseProcessor = new ClaudeResponseProcessor(this);
+    this.requestBuilder = new ClaudeStructuredRequest(this);
+    this.queueMonitor = new TaskQueueMonitor(this);
     
     // File paths for persistence
     this.taskQueueFile = path.join(this.directories.workspace, 'task_queue.json');
@@ -43,6 +51,11 @@ class CoordinatorAgent extends BaseAgent {
         await this.logError(`Failed to parse task queue: ${error.message}`);
       }
       await this.log(`Loaded ${this.taskQueue.length} tasks from queue`);
+      
+      // Sync loaded tasks with TaskManager if available
+      if (this.taskManager && this.taskQueue.length > 0) {
+        await this.syncTasksWithTaskManager();
+      }
     } else {
       await fs.writeFile(this.taskQueueFile, '[]');
     }
@@ -67,20 +80,48 @@ class CoordinatorAgent extends BaseAgent {
       await fs.writeFile(this.workLogFile, '[]');
     }
     
-    // Initialize agent status
-    for (const agent of this.agents) {
-      this.agentStatus[agent] = {
-        status: 'available',  // Changed from 'unknown' to 'available' so agents can receive tasks
-        lastSeen: null,
-        currentTask: null,
-        tasksCompleted: 0
-      };
+    // Load or create agent status file
+    if (await this.fileExists(this.agentStatusFile)) {
+      const content = await fs.readFile(this.agentStatusFile, 'utf8');
+      try {
+        const parsed = JSON.parse(content);
+        if (typeof parsed === 'object' && parsed !== null) {
+          this.agentStatus = parsed;
+          await this.log('Loaded agent status from file');
+        } else {
+          await this.logError('Agent status file has invalid format, initializing new status');
+        }
+      } catch (error) {
+        await this.logError(`Failed to parse agent status: ${error.message}`);
+      }
     }
+    
+    // Initialize missing agent status entries
+    for (const agent of this.agents) {
+      if (!this.agentStatus[agent]) {
+        this.agentStatus[agent] = {
+          status: 'available',  // Changed from 'unknown' to 'available' so agents can receive tasks
+          lastSeen: null,
+          currentTask: null,
+          tasksCompleted: 0
+        };
+      }
+    }
+    
+    // Save initial agent status
+    await this.saveAgentStatus();
     
     // Analyze project if this is a fresh start
     if (this.taskQueue.length === 0) {
       await this.analyzeProject();
     }
+    
+    // Start task queue monitoring
+    this.queueMonitor.startMonitoring(this, {
+      checkInterval: 60000, // Check every minute
+      healthInterval: 30000, // Health check every 30 seconds
+      autoRecover: true
+    });
     
     // Immediately try to distribute existing tasks
     await this.log('Performing initial task distribution check');
@@ -88,63 +129,116 @@ class CoordinatorAgent extends BaseAgent {
   }
   
   /**
-   * Analyze project and create initial task list
+   * Load pre-generated tasks or analyze project to create initial task list
    */
   async analyzeProject() {
-    await this.log('Analyzing project to create initial task list');
+    // First, check for pre-generated tasks from project initialization
+    const preGeneratedTasks = await this.loadPreGeneratedTasks();
     
-    const prompt = `As a project coordinator, analyze this project and create an initial task list.
+    if (preGeneratedTasks && preGeneratedTasks.length > 0) {
+      await this.log(`Loading ${preGeneratedTasks.length} pre-generated customized tasks`);
+      
+      // Add pre-generated tasks to queue
+      for (const task of preGeneratedTasks) {
+        await this.addTask(task);
+      }
+      
+      await this.log(`Successfully loaded ${preGeneratedTasks.length} customized tasks (distribution: planner=${preGeneratedTasks.filter(t => t.assignedAgent === 'planner').length}, coder=${preGeneratedTasks.filter(t => t.assignedAgent === 'coder').length}, tester=${preGeneratedTasks.filter(t => t.assignedAgent === 'tester').length}, reviewer=${preGeneratedTasks.filter(t => t.assignedAgent === 'reviewer').length})`);
+      return;
+    }
     
-Project Vision:
-${this.projectVision || 'Not provided'}
+    // Fallback to original analysis if no pre-generated tasks
+    await this.log('No pre-generated tasks found, analyzing project to create initial task list');
     
-Project Specification:
-${this.projectSpec || 'Not provided'}
-
-Project Goals:
-${JSON.stringify(this.goals, null, 2) || 'Not provided'}
-
-Please provide a structured task list with the following for each task:
-1. Task ID (unique identifier)
-2. Task description
-3. Assigned agent (planner, coder, tester, or reviewer)
-4. Priority (high, medium, or low)
-5. Dependencies (task IDs that must be completed first)
-6. Estimated effort (hours)
-
-Format the response as a JSON array of task objects.`;
+    // Build structured request
+    const prompt = this.requestBuilder.buildRequest('analyzeProject', {
+      vision: this.projectVision,
+      spec: this.projectSpec,
+      goals: this.goals
+    });
     
     try {
-      // Use longer timeout for initial project analysis (10 minutes)
-      const response = await this.askClaude(prompt, '', { timeout: 600000 });
+      // Call Claude with structured prompt
+      const response = await this.askClaude(prompt, '', {
+        timeout: 600000, // 10 minutes
+        outputFormat: 'json' // Request JSON output format
+      });
       
-      // Try to parse the response as JSON
-      let tasks = [];
-      try {
-        // Extract JSON from the response (it might be wrapped in markdown)
-        const jsonMatch = response.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          tasks = JSON.parse(jsonMatch[0]);
-        }
-      } catch (parseError) {
-        // If parsing fails, create a basic task list
-        await this.logError(`Failed to parse task list from Claude: ${parseError.message}`);
-        tasks = this.createDefaultTasks();
-      }
+      // Process response through validation pipeline
+      const tasks = await this.responseProcessor.processTaskResponse(response, {
+        minTasks: 15,
+        maxTasks: 20,
+        requiredFields: ['id', 'description', 'assignedAgent'],
+        validAgents: this.agents,
+        fallbackTasks: this.createDefaultTasks()
+      });
+      
+      await this.log(`Processed ${tasks.length} tasks through validation pipeline`);
       
       // Add tasks to queue
       for (const task of tasks) {
         await this.addTask(task);
       }
       
-      await this.log(`Created ${tasks.length} initial tasks`);
+      await this.log(`Added ${tasks.length} initial tasks to queue`);
+      
     } catch (error) {
       await this.logError(`Failed to analyze project: ${error.message}`);
-      // Create default tasks as fallback
+      
+      // Fallback to guaranteed default tasks
       const defaultTasks = this.createDefaultTasks();
       for (const task of defaultTasks) {
         await this.addTask(task);
       }
+      
+      await this.log(`Used fallback tasks: ${defaultTasks.length} tasks created`);
+    }
+    
+    // Final verification - ensure we ALWAYS have tasks
+    if (this.taskQueue.length === 0) {
+      await this.logError('Emergency: Queue still empty after analysis, injecting emergency task');
+      await this.addTask({
+        id: 'emergency_init_001',
+        description: 'Initialize project structure and create roadmap',
+        assignedAgent: 'planner',
+        priority: 'critical',
+        dependencies: [],
+        estimatedEffort: 1
+      });
+    }
+  }
+  
+  /**
+   * Load pre-generated tasks from project initialization
+   */
+  async loadPreGeneratedTasks() {
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      
+      // Check for initial_tasks.json in coordinator workspace
+      const tasksFile = path.join(this.workspaceDir, 'initial_tasks.json');
+      
+      try {
+        const tasksData = await fs.readFile(tasksFile, 'utf8');
+        const { tasks, customized, distribution } = JSON.parse(tasksData);
+        
+        await this.log(`Found pre-generated tasks file: ${tasks.length} tasks (customized: ${customized})`);
+        
+        // Log task distribution
+        if (distribution) {
+          await this.log(`Task distribution: planner=${distribution.planner}, coder=${distribution.coder}, tester=${distribution.tester}, reviewer=${distribution.reviewer}`);
+        }
+        
+        return tasks;
+      } catch (error) {
+        // File doesn't exist or is invalid
+        await this.log('No pre-generated tasks file found or file is invalid');
+        return null;
+      }
+    } catch (error) {
+      await this.logError(`Error loading pre-generated tasks: ${error.message}`);
+      return null;
     }
   }
   
@@ -212,8 +306,85 @@ Format the response as a JSON array of task objects.`;
     this.taskQueue.push(completeTask);
     await this.saveTaskQueue();
     
+    // Also add to TaskManager if available
+    if (this.taskManager) {
+      try {
+        const taskManagerTask = {
+          id: completeTask.id,
+          title: completeTask.description.substring(0, 50),
+          description: completeTask.description,
+          projectId: this.projectId,
+          assignedAgent: completeTask.assignedAgent,
+          priority: completeTask.priority,
+          status: completeTask.status,
+          dependencies: completeTask.dependencies || [],
+          estimatedEffort: completeTask.estimatedEffort,
+          createdAt: completeTask.createdAt
+        };
+        this.taskManager.createTask(taskManagerTask);
+        await this.log(`Added task ${completeTask.id} to TaskManager`);
+      } catch (error) {
+        await this.logError(`Failed to add task to TaskManager: ${error.message}`);
+      }
+    }
+    
     await this.log(`Added task ${completeTask.id} to queue`);
     return completeTask;
+  }
+  
+  /**
+   * Sync tasks from local queue to TaskManager
+   */
+  async syncTasksWithTaskManager() {
+    if (!this.taskManager) {
+      await this.logError('TaskManager not available for syncing');
+      return;
+    }
+    
+    await this.log(`Syncing ${this.taskQueue.length} tasks with TaskManager`);
+    
+    let syncedCount = 0;
+    let errorCount = 0;
+    
+    for (const task of this.taskQueue) {
+      try {
+        // Check if task already exists in TaskManager
+        const existingTask = this.taskManager.tasks.get(task.id);
+        if (!existingTask) {
+          // Create task in TaskManager
+          const taskManagerTask = {
+            id: task.id,
+            title: task.description ? task.description.substring(0, 50) : 'Untitled',
+            description: task.description || '',
+            projectId: this.projectId,
+            assignedAgent: task.assignedAgent,
+            priority: task.priority || 'medium',
+            status: task.status || 'pending',
+            dependencies: task.dependencies || [],
+            estimatedEffort: task.estimatedEffort || 1,
+            createdAt: task.createdAt || new Date().toISOString(),
+            attempts: task.attempts || 0
+          };
+          
+          this.taskManager.createTask(taskManagerTask);
+          syncedCount++;
+        } else {
+          // Update existing task status if different
+          if (existingTask.status !== task.status) {
+            this.taskManager.updateTaskStatus(task.id, task.status, {
+              attempts: task.attempts,
+              lastUpdate: new Date().toISOString()
+            });
+            syncedCount++;
+          }
+        }
+      } catch (error) {
+        await this.logError(`Failed to sync task ${task.id}: ${error.message}`);
+        errorCount++;
+      }
+    }
+    
+    await this.log(`Task sync complete: ${syncedCount} synced, ${errorCount} errors`);
   }
   
   /**
@@ -459,6 +630,19 @@ Format the response as a JSON array of task objects.`;
       await this.saveTaskQueue();
       await this.saveWorkLog();
       
+      // Update TaskManager if available
+      if (this.taskManager) {
+        try {
+          this.taskManager.updateTaskStatus(taskId, 'completed', {
+            completedBy: agentName,
+            completedAt: task.completedAt,
+            result: result
+          });
+        } catch (error) {
+          await this.logError(`Failed to update TaskManager for completed task: ${error.message}`);
+        }
+      }
+      
       // Generate follow-up tasks based on completion
       await this.generateFollowUpTasks(task, result);
     }
@@ -477,53 +661,137 @@ Format the response as a JSON array of task objects.`;
   }
   
   /**
-   * Generate follow-up tasks based on task completion
+   * Generate follow-up tasks based on task completion using structured system
    */
   async generateFollowUpTasks(completedTask, result) {
     await this.log(`Analyzing completed task ${completedTask.id} for follow-up work`);
     
     // Only generate follow-ups for certain task types
     if (completedTask.assignedAgent === 'planner' && result?.plan) {
-      // Extract actionable items from planner's result
-      const prompt = `Based on this completed planning task and its results, identify any immediate follow-up tasks needed.
-
-Completed Task: ${completedTask.description}
-Task Result: ${JSON.stringify(result, null, 2).substring(0, 1000)}
-
-Project Goals:
-${JSON.stringify(this.goals?.slice(0, 3), null, 2)}
-
-If there are concrete implementation tasks that should follow this plan, provide them as a JSON array with:
-- id: unique task ID
-- description: clear task description
-- assignedAgent: coder, tester, or reviewer
-- priority: high, medium, or low
-- dependencies: array of task IDs
-- estimatedEffort: hours
-
-Only generate tasks that are directly actionable. Return empty array if no follow-up needed.`;
+      // Build structured request for follow-up tasks
+      const prompt = this.requestBuilder.buildRequest('followUpTasks', {
+        completedTask: completedTask,
+        result: result,
+        goals: this.goals
+      });
 
       try {
-        // Use longer timeout for analysis (8 minutes)
-        const response = await this.askClaude(prompt, '', { timeout: 480000 });
-        const jsonMatch = response.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          const newTasks = JSON.parse(jsonMatch[0]);
-          for (const newTask of newTasks) {
-            await this.addTask({
-              ...newTask,
-              id: newTask.id || `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              generatedFrom: completedTask.id
-            });
-          }
-          if (newTasks.length > 0) {
-            await this.log(`Generated ${newTasks.length} follow-up tasks from ${completedTask.id}`);
-          }
+        // Call Claude with structured prompt
+        const response = await this.askClaude(prompt, '', {
+          timeout: 600000, // 10 minutes
+          outputFormat: 'json'
+        });
+        
+        // Process follow-up response
+        const newTasks = await this.responseProcessor.processFollowUpResponse(
+          response,
+          completedTask.id
+        );
+        
+        // Add new tasks to queue
+        for (const newTask of newTasks) {
+          await this.addTask(newTask);
+        }
+        
+        if (newTasks.length > 0) {
+          await this.log(`Generated ${newTasks.length} follow-up tasks from ${completedTask.id}`);
         }
       } catch (error) {
         await this.logError(`Failed to generate follow-up tasks: ${error.message}`);
       }
     }
+  }
+  
+  /**
+   * Generate recovery tasks when queue is empty
+   */
+  async generateRecoveryTasks() {
+    await this.log('Generating recovery tasks to prevent queue starvation');
+    
+    const hasCompletedWork = this.workLog.length > 0;
+    const context = {
+      hasCompletedWork,
+      completedTasks: this.workLog.slice(-5), // Last 5 completed tasks
+      goals: this.goals,
+      projectVision: this.projectVision
+    };
+    
+    if (hasCompletedWork) {
+      // Build on completed work
+      const prompt = this.requestBuilder.buildRequest('generateTasks', {
+        prompt: `Based on completed work, identify next implementation steps`,
+        expectedFormat: `[
+          {
+            "id": "next_001",
+            "description": "Next logical step based on completed work",
+            "assignedAgent": "coder",
+            "priority": "high",
+            "dependencies": [],
+            "estimatedEffort": 2
+          }
+        ]`
+      });
+      
+      try {
+        const response = await this.askClaude(prompt, JSON.stringify(context), {
+          timeout: 600000, // 10 minutes
+          outputFormat: 'json'
+        });
+        
+        const tasks = await this.responseProcessor.processTaskResponse(response, {
+          minTasks: 1,
+          maxTasks: 5
+        });
+        
+        for (const task of tasks) {
+          await this.addTask(task);
+        }
+        
+        await this.log(`Generated ${tasks.length} recovery tasks`);
+      } catch (error) {
+        await this.logError(`Recovery task generation failed: ${error.message}`);
+        await this.injectEmergencyTasks();
+      }
+    } else {
+      // No completed work, start fresh
+      await this.injectEmergencyTasks();
+    }
+  }
+  
+  /**
+   * Inject emergency tasks as last resort
+   */
+  async injectEmergencyTasks() {
+    await this.log('Injecting emergency tasks as last resort');
+    
+    const emergencyTasks = [
+      {
+        id: `emergency_${Date.now()}_1`,
+        description: 'Analyze project requirements and create implementation plan',
+        assignedAgent: 'planner',
+        priority: 'critical',
+        dependencies: [],
+        estimatedEffort: 2,
+        status: 'pending',
+        isEmergency: true
+      },
+      {
+        id: `emergency_${Date.now()}_2`,
+        description: 'Set up basic project structure',
+        assignedAgent: 'coder',
+        priority: 'high',
+        dependencies: [],
+        estimatedEffort: 1,
+        status: 'pending',
+        isEmergency: true
+      }
+    ];
+    
+    for (const task of emergencyTasks) {
+      await this.addTask(task);
+    }
+    
+    await this.log(`Injected ${emergencyTasks.length} emergency tasks`);
   }
   
   /**
@@ -547,6 +815,20 @@ Only generate tasks that are directly actionable. Return empty array if no follo
       }
       
       await this.saveTaskQueue();
+      
+      // Update TaskManager if available
+      if (this.taskManager) {
+        try {
+          this.taskManager.updateTaskStatus(taskId, 'failed', {
+            failedBy: agentName,
+            failedAt: task.failedAt,
+            error: error,
+            attempts: task.attempts
+          });
+        } catch (error) {
+          await this.logError(`Failed to update TaskManager for failed task: ${error.message}`);
+        }
+      }
     }
     
     // Update agent status
@@ -649,6 +931,12 @@ Only generate tasks that are directly actionable. Return empty array if no follo
     if (!this.lastHealthCheck || now - this.lastHealthCheck > 10000) {
       await this.checkAgentHealth();
       this.lastHealthCheck = now;
+    }
+    
+    // Validate task queue integrity every 30 seconds
+    if (!this.lastQueueValidation || now - this.lastQueueValidation > 30000) {
+      await this.validateTaskQueue();
+      this.lastQueueValidation = now;
     }
     
     // Try to distribute tasks
@@ -760,6 +1048,180 @@ Only generate tasks that are directly actionable. Return empty array if no follo
   
   async saveAgentStatus() {
     await fs.writeFile(this.agentStatusFile, JSON.stringify(this.agentStatus, null, 2));
+  }
+  
+  /**
+   * Detect cycles in task dependencies
+   */
+  detectDependencyCycles() {
+    const visited = new Set();
+    const recursionStack = new Set();
+    const cycles = [];
+    
+    const hasCycleDFS = (taskId, path = []) => {
+      if (recursionStack.has(taskId)) {
+        // Found a cycle
+        const cycleStart = path.indexOf(taskId);
+        const cycle = path.slice(cycleStart).concat(taskId);
+        cycles.push(cycle);
+        return true;
+      }
+      
+      if (visited.has(taskId)) {
+        return false;
+      }
+      
+      visited.add(taskId);
+      recursionStack.add(taskId);
+      
+      const task = this.taskQueue.find(t => t.id === taskId);
+      if (task && task.dependencies) {
+        for (const depId of task.dependencies) {
+          if (hasCycleDFS(depId, [...path, taskId])) {
+            // Don't return immediately, check all paths
+          }
+        }
+      }
+      
+      recursionStack.delete(taskId);
+      return false;
+    };
+    
+    // Check all tasks for cycles
+    for (const task of this.taskQueue) {
+      if (!visited.has(task.id)) {
+        hasCycleDFS(task.id);
+      }
+    }
+    
+    return cycles;
+  }
+  
+  /**
+   * Resolve dependency deadlocks
+   */
+  async resolveDependencyDeadlocks() {
+    const cycles = this.detectDependencyCycles();
+    
+    if (cycles.length === 0) {
+      return false; // No cycles found
+    }
+    
+    await this.log(`Found ${cycles.length} dependency cycles, resolving...`);
+    
+    for (const cycle of cycles) {
+      await this.log(`Cycle detected: ${cycle.join(' -> ')}`);
+      
+      // Break the cycle by removing the last dependency
+      const lastTaskId = cycle[cycle.length - 2]; // Second to last (before it loops back)
+      const task = this.taskQueue.find(t => t.id === lastTaskId);
+      
+      if (task && task.dependencies) {
+        const depToRemove = cycle[cycle.length - 1];
+        const depIndex = task.dependencies.indexOf(depToRemove);
+        
+        if (depIndex !== -1) {
+          task.dependencies.splice(depIndex, 1);
+          await this.log(`Removed dependency ${depToRemove} from task ${lastTaskId} to break cycle`);
+          
+          // Mark task for forced start if it has no other dependencies
+          if (task.dependencies.length === 0) {
+            task.forcedStart = true;
+          }
+        }
+      }
+    }
+    
+    // Check for orphaned dependencies (dependencies on non-existent tasks)
+    for (const task of this.taskQueue) {
+      if (task.dependencies && task.dependencies.length > 0) {
+        const validDeps = [];
+        const invalidDeps = [];
+        
+        for (const depId of task.dependencies) {
+          if (this.taskQueue.some(t => t.id === depId)) {
+            validDeps.push(depId);
+          } else {
+            invalidDeps.push(depId);
+          }
+        }
+        
+        if (invalidDeps.length > 0) {
+          await this.log(`Task ${task.id} has invalid dependencies: ${invalidDeps.join(', ')}, removing them`);
+          task.dependencies = validDeps;
+          
+          if (validDeps.length === 0) {
+            task.forcedStart = true;
+          }
+        }
+      }
+    }
+    
+    await this.saveTaskQueue();
+    return true; // Deadlocks resolved
+  }
+  
+  /**
+   * Validate task queue integrity
+   */
+  async validateTaskQueue() {
+    let issuesFound = false;
+    
+    // Check for duplicate task IDs
+    const taskIds = new Set();
+    const duplicates = [];
+    
+    for (const task of this.taskQueue) {
+      if (taskIds.has(task.id)) {
+        duplicates.push(task.id);
+      }
+      taskIds.add(task.id);
+    }
+    
+    if (duplicates.length > 0) {
+      await this.logError(`Duplicate task IDs found: ${duplicates.join(', ')}`);
+      issuesFound = true;
+      
+      // Remove duplicates, keeping the first occurrence
+      const seen = new Set();
+      this.taskQueue = this.taskQueue.filter(task => {
+        if (seen.has(task.id)) {
+          return false;
+        }
+        seen.add(task.id);
+        return true;
+      });
+    }
+    
+    // Check for and resolve dependency cycles
+    const hadCycles = await this.resolveDependencyDeadlocks();
+    if (hadCycles) {
+      issuesFound = true;
+    }
+    
+    // Check for tasks stuck in in_progress for too long
+    const stuckThreshold = 600000; // 10 minutes
+    const now = Date.now();
+    
+    for (const task of this.taskQueue) {
+      if (task.status === 'in_progress' && task.assignedAt) {
+        const assignedTime = new Date(task.assignedAt).getTime();
+        if (now - assignedTime > stuckThreshold) {
+          await this.log(`Task ${task.id} stuck in progress for ${Math.round((now - assignedTime) / 60000)} minutes, resetting`);
+          task.status = 'pending';
+          task.attempts = (task.attempts || 0) + 1;
+          delete task.assignedAt;
+          issuesFound = true;
+        }
+      }
+    }
+    
+    if (issuesFound) {
+      await this.saveTaskQueue();
+      await this.log('Task queue validation completed, issues resolved');
+    }
+    
+    return issuesFound;
   }
   
   /**

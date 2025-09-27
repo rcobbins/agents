@@ -590,21 +590,29 @@ ${instructionsSummary}
     await this.updateStatus('running', 'Agent running');
     this.log(`Starting ${this.agentName} event loop`);
     
-    // Track if we're currently processing to avoid overlaps
-    let isProcessing = false;
+    // Track processing state with timeout protection
+    let processingPromise = null;
+    let processingStartTime = null;
+    const MAX_PROCESSING_TIME = 1800000; // 30 minutes max per iteration (to handle multiple Claude messages)
     
     // Process messages every 2 seconds (matching bash implementation)
     this.eventLoopInterval = setInterval(() => {
       // Skip if still processing previous iteration
-      if (isProcessing) {
-        this.log('Skipping event loop iteration - previous still processing');
-        return;
+      if (processingPromise) {
+        const processingTime = Date.now() - processingStartTime;
+        if (processingTime > MAX_PROCESSING_TIME) {
+          this.logError(`Event loop iteration timed out after ${Math.round(processingTime/1000)}s, forcing continue`);
+          processingPromise = null;
+        } else {
+          this.log('Skipping event loop iteration - previous still processing');
+          return;
+        }
       }
       
-      isProcessing = true;
+      processingStartTime = Date.now();
       
-      // Use immediate execution to handle async operations properly
-      (async () => {
+      // Create processing promise with better error handling
+      processingPromise = (async () => {
         try {
           // Emit heartbeat for health monitoring
           this.emit('statusUpdated', {
@@ -614,32 +622,66 @@ ${instructionsSummary}
             timestamp: new Date().toISOString()
           });
           
-          // Process queued messages in integrated mode
+          // Process queued messages in integrated mode with batching
           if (this.runMode === 'integrated' && this.messageQueue.length > 0) {
-            await this.processMessages();
+            // Process up to 5 messages per iteration to avoid blocking
+            const messagesToProcess = Math.min(5, this.messageQueue.length);
+            for (let i = 0; i < messagesToProcess; i++) {
+              if (this.messageQueue.length > 0) {
+                await Promise.race([
+                  this.processMessages(),
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Message processing timeout')), 600000) // 10 minutes for Claude responses
+                  )
+                ]).catch(error => {
+                  this.logError(`Message processing failed: ${error.message}`);
+                });
+              }
+            }
           }
           
-          // Check for messages in inbox (for standalone mode)
+          // Check for messages in inbox (for standalone mode) with timeout
           if (this.runMode === 'standalone') {
             const messages = await this.getInboxMessages();
             for (const messageFile of messages) {
-              await this.processMessage(messageFile);
+              await Promise.race([
+                this.processMessage(messageFile),
+                new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error('Message processing timeout')), 600000) // 10 minutes for Claude responses
+                )
+              ]).catch(error => {
+                this.logError(`Failed to process message: ${error.message}`);
+              });
             }
           }
           
           // Check for control signals
           await this.checkControlSignals();
           
-          // Periodic tasks (to be overridden)
+          // Periodic tasks with timeout protection
           if (typeof this.periodicTasks === 'function') {
-            await this.periodicTasks();
+            await Promise.race([
+              this.periodicTasks(),
+              new Promise((resolve) => 
+                setTimeout(() => {
+                  this.logError('Periodic tasks timeout, skipping');
+                  resolve();
+                }, 5000)
+              )
+            ]);
           }
         } catch (error) {
           this.logError(`Event loop error: ${error.message}`);
         } finally {
-          isProcessing = false;
+          processingPromise = null;
         }
       })();
+      
+      // Ensure promise always resolves
+      processingPromise.catch(error => {
+        this.logError(`Unhandled event loop error: ${error.message}`);
+        processingPromise = null;
+      });
     }, 2000);
     
     this.emit('eventLoopStarted');

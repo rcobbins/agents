@@ -50,6 +50,12 @@ interface ReviewWithValidationProps {
   onGenerate: () => void;
   onSave?: () => void;
   isGenerating?: boolean;
+  taskCustomizationStatus?: {
+    status: 'idle' | 'starting' | 'completed' | 'error';
+    message: string;
+    taskCount?: number;
+    distribution?: Record<string, number>;
+  };
 }
 
 const ReviewWithValidation: React.FC<ReviewWithValidationProps> = ({
@@ -58,6 +64,7 @@ const ReviewWithValidation: React.FC<ReviewWithValidationProps> = ({
   onGenerate,
   onSave,
   isGenerating = false,
+  taskCustomizationStatus,
 }) => {
   const [expanded, setExpanded] = useState<string | false>('overview');
   const [showCommands, setShowCommands] = useState(false);
@@ -469,6 +476,69 @@ const ReviewWithValidation: React.FC<ReviewWithValidationProps> = ({
             {isGenerating ? 'Generating...' : 'Generate Project'}
           </Button>
         </Stack>
+        
+        {/* Task Customization Status */}
+        {taskCustomizationStatus && taskCustomizationStatus.status !== 'idle' && (
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              {taskCustomizationStatus.status === 'starting' && (
+                <>
+                  <CircularProgress size={16} />
+                  <Typography variant="body2" color="primary">
+                    Customizing project tasks with AI...
+                  </Typography>
+                </>
+              )}
+              {taskCustomizationStatus.status === 'completed' && (
+                <>
+                  <CheckCircle color="success" fontSize="small" />
+                  <Typography variant="body2" color="success.main">
+                    {taskCustomizationStatus.message}
+                  </Typography>
+                </>
+              )}
+              {taskCustomizationStatus.status === 'error' && (
+                <>
+                  <Warning color="warning" fontSize="small" />
+                  <Typography variant="body2" color="warning.main">
+                    {taskCustomizationStatus.message}
+                  </Typography>
+                </>
+              )}
+            </Box>
+            
+            {/* Show task distribution if available */}
+            {taskCustomizationStatus.distribution && (
+              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Task Distribution:
+                </Typography>
+                {Object.entries(taskCustomizationStatus.distribution).map(([agent, count]) => (
+                  <Chip
+                    key={agent}
+                    label={`${agent}: ${count}`}
+                    size="small"
+                    variant="outlined"
+                    color={
+                      agent === 'planner' ? 'primary' :
+                      agent === 'coder' ? 'secondary' :
+                      agent === 'tester' ? 'success' :
+                      agent === 'reviewer' ? 'warning' : 'default'
+                    }
+                  />
+                ))}
+                {taskCustomizationStatus.taskCount && (
+                  <Chip
+                    label={`Total: ${taskCustomizationStatus.taskCount}`}
+                    size="small"
+                    variant="filled"
+                    color="primary"
+                  />
+                )}
+              </Stack>
+            )}
+          </Box>
+        )}
       </Box>
 
       {/* Setup Commands Dialog */}

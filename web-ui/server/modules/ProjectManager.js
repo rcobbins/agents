@@ -1,13 +1,20 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const TaskCustomizer = require('./TaskCustomizer');
 
 class ProjectManager {
   constructor(logger) {
     this.logger = logger;
     this.projects = new Map();
     this.agentManager = null; // Will be set by server
+    this.taskCustomizer = new TaskCustomizer(logger);
+    this.eventEmitter = null; // Will be set by server for progress events
     this.loadProjects();
+  }
+  
+  setEventEmitter(eventEmitter) {
+    this.eventEmitter = eventEmitter;
   }
 
   setAgentManager(agentManager) {
@@ -626,6 +633,71 @@ build/
       this.logger.info(`Created initial project files in: ${projectPath}`);
     } catch (error) {
       this.logger.error('Error creating project files:', error);
+    }
+
+    // Generate customized tasks using AI
+    try {
+      this.logger.info('Generating customized project tasks...');
+      
+      // Emit progress event if available
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('project:taskCustomization', {
+          projectId: project.id,
+          status: 'starting',
+          message: 'Customizing project tasks with AI...'
+        });
+      }
+      
+      // Generate tasks using Claude
+      const customizedTasks = await this.taskCustomizer.generateCustomTasks(project);
+      
+      // Save tasks to project directory
+      const tasksFile = await this.taskCustomizer.saveTasksToProject(projectPath, customizedTasks);
+      
+      // Add task info to project metadata
+      project.initialTasks = {
+        count: customizedTasks.length,
+        customized: customizedTasks.some(t => t.customized),
+        distribution: this.taskCustomizer.getTaskDistribution(customizedTasks),
+        generatedAt: new Date().toISOString(),
+        filePath: tasksFile
+      };
+      
+      // Emit completion event
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('project:taskCustomization', {
+          projectId: project.id,
+          status: 'completed',
+          message: `Generated ${customizedTasks.length} customized tasks`,
+          taskCount: customizedTasks.length,
+          distribution: project.initialTasks.distribution
+        });
+      }
+      
+      this.logger.info(`Generated ${customizedTasks.length} customized tasks for project`);
+    } catch (error) {
+      this.logger.error('Failed to customize tasks:', error);
+      
+      // Emit error event but don't fail project creation
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('project:taskCustomization', {
+          projectId: project.id,
+          status: 'error',
+          message: 'Using default tasks due to customization error',
+          error: error.message
+        });
+      }
+      
+      // Create minimal default tasks as fallback
+      const fallbackTasks = this.taskCustomizer.createEnhancedDefaultTasks(project);
+      await this.taskCustomizer.saveTasksToProject(projectPath, fallbackTasks);
+      
+      project.initialTasks = {
+        count: fallbackTasks.length,
+        customized: false,
+        fallback: true,
+        generatedAt: new Date().toISOString()
+      };
     }
 
     this.projects.set(project.id, project);
